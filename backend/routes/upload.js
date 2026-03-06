@@ -14,6 +14,10 @@ router.post("/", upload.array("resumes"), async (req, res) => {
 
     const job = req.body.job;
 
+    if (!job || typeof job !== "string" || job.trim().length === 0) {
+      return res.status(400).json({ message: "Job description is required" });
+    }
+
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ message: "No resumes uploaded" });
     }
@@ -30,14 +34,16 @@ router.post("/", upload.array("resumes"), async (req, res) => {
       // 2️⃣ AI score
       const aiResult = await scoreResume(text, job);
 
-    const score = typeof aiResult === "number"
+    const score =
+      typeof aiResult === "number"
         ? aiResult
-        : aiResult.score || 50;
+        : aiResult?.score ?? 50;
 
       // 3️⃣ save to MongoDB
       const candidate = new Candidate({
         name: file.originalname,
-        score: score,
+        score,
+        job,
         resumeText: text
       });
 
