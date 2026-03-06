@@ -17,10 +17,12 @@ Give a score from 0 to 100.
 Only return the number.
 `;
 
+const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+
 const response = await axios.post(
 "https://api.groq.com/openai/v1/chat/completions",
 {
-model: "llama-3.1-8b-instant",
+model,
 messages: [
 {
 role: "user",
