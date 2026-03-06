@@ -1,7 +1,10 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-require("dotenv").config();
+const path = require("path");
+
+// Load environment variables from backend/.env when running locally
+require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 
 const uploadRoute = require("./routes/upload");
 const chatRoute = require("./routes/chat");
@@ -42,10 +45,33 @@ app.get("/candidates/top", async (req, res) => {
   }
 });
 
-mongoose.connect(process.env.MONGO_URI)
-.then(()=> console.log("MongoDB Connected"))
-.catch(err => console.log(err));
+const PORT = process.env.PORT || 5000;
 
-app.listen(5000,()=>{
-console.log("Server running on port 5000");
+if (!process.env.MONGO_URI) {
+  console.error(
+    "ERROR: MONGO_URI environment variable is not set.\nMake sure to set MONGO_URI in your deployment environment or in backend/.env for local dev."
+  );
+  process.exit(1);
+}
+
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB Connected"))
+  .catch((err) => {
+    console.error("MongoDB connection error:", err);
+    process.exit(1);
+  });
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection:", reason);
+  process.exit(1);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception:", err);
+  process.exit(1);
 });
