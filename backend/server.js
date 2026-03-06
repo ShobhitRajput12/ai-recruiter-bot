@@ -23,10 +23,6 @@ app.get("/", (req, res) => {
   res.send("AI Recruiter Bot API Running");
 });
 
-app.get("/debug", (req,res)=>{
-  res.send("Debug route working");
-});
-
 const PORT = process.env.PORT || 5000;
 
 if (!process.env.MONGO_URI) {
