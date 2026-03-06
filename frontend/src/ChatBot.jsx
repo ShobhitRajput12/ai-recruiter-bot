@@ -1,5 +1,6 @@
 import axios from "axios";
 import { useState } from "react";
+import { API_BASE_URL } from "./config";
 
 function ChatBot() {
 
@@ -11,7 +12,7 @@ function ChatBot() {
     setError("");
     try {
       const res = await axios.post(
-        "http://localhost:5000/chat",
+        `${API_BASE_URL}/chat`,
         { question: q }
       );
 

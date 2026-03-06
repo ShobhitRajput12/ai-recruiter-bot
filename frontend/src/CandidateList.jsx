@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "./config";
 
 function CandidateList() {
 
   const [data, setData] = useState([]);
 
   useEffect(() => {
-    axios.get("http://localhost:5000/candidates")
+    axios.get(`${API_BASE_URL}/candidates`)
       .then(res => setData(res.data));
   }, []);
 

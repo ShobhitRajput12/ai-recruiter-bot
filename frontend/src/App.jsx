@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { API_BASE_URL } from "./config";
 
 function App() {
 
@@ -19,13 +20,13 @@ useEffect(() => {
 const loadCandidates = async () => {
   try {
     const [latestRes, topRes] = await Promise.all([
-      fetch("http://localhost:5000/candidates/latest"),
-      fetch("http://localhost:5000/candidates/top")
+      fetch(`${API_BASE_URL}/candidates/latest`),
+      fetch(`${API_BASE_URL}/candidates/top`)
     ]);
-    
+
     const latestData = await latestRes.json();
     const topData = await topRes.json();
-    
+
     setLatestCandidates(latestData);
     setTopCandidates(topData);
   } catch (err) {
@@ -33,35 +34,34 @@ const loadCandidates = async () => {
   }
 };
 
-const handleFileChange = (e)=>{
-setFiles(e.target.files);
+const handleFileChange = (e) => {
+  setFiles(e.target.files);
 };
 
-const uploadResumes = async ()=>{
+const uploadResumes = async () => {
   setLoading(true);
   try {
     const formData = new FormData();
 
-    for(let i=0;i<files.length;i++){
-      formData.append("resumes",files[i]);
+    for (let i = 0; i < files.length; i++) {
+      formData.append("resumes", files[i]);
     }
 
-    formData.append("job",job);
+    formData.append("job", job);
 
-    const res = await fetch("http://localhost:5000/upload",{
-      method:"POST",
-      body:formData
+    const res = await fetch(`${API_BASE_URL}/upload`, {
+      method: "POST",
+      body: formData
     });
 
     const data = await res.json();
 
-    data.candidates.sort((a,b)=>b.score-a.score);
+    data.candidates.sort((a, b) => b.score - a.score);
 
     setCandidates(data.candidates);
-    
+
     // Refresh the candidate lists
     await loadCandidates();
-    
   } catch (err) {
     console.error("Upload failed:", err);
   } finally {
@@ -69,20 +69,21 @@ const uploadResumes = async ()=>{
   }
 };
 
-const askChatbot = async ()=>{
+const askChatbot = async () => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ question })
+    });
 
-const res = await fetch("http://localhost:5000/chat",{
-method:"POST",
-headers:{
-"Content-Type":"application/json"
-},
-body:JSON.stringify({question})
-});
-
-const data = await res.json();
-
-setAnswer(data.answer);
-
+    const data = await res.json();
+    setAnswer(data.answer);
+  } catch (err) {
+    console.error("Chat request failed:", err);
+  }
 };
 
 // Candidate Card Component
