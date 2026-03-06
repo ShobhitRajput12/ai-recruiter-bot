@@ -1,0 +1,28 @@
+services:
+  - type: web_service
+    name: ai-recruiter-bot-backend
+    env: node
+    plan: free
+    branch: main
+    root: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: MONGO_URI
+        value: "" # Set this in Render dashboard (secret)
+      - key: GROQ_API_KEY
+        value: "" # Set this in Render dashboard (secret)
+      - key: GROQ_MODEL
+        value: "llama-3.3-70b-versatile"
+
+  - type: static_site
+    name: ai-recruiter-bot-frontend
+    env: static
+    plan: free
+    branch: main
+    root: frontend
+    buildCommand: npm install && npm run build
+    publishPath: dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: "https://ai-recruiter-bot-backend.onrender.com"  # Update as needed if your backend URL differs
