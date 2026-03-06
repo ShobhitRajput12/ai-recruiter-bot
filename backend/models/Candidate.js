@@ -6,6 +6,6 @@ name: String,
 score: Number,
 resumeText: String
 
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model("Candidate",CandidateSchema);

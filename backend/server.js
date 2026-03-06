@@ -24,6 +24,24 @@ app.get("/candidates", async (req, res) => {
   }
 });
 
+app.get("/candidates/latest", async (req, res) => {
+  try {
+    const candidates = await Candidate.find().sort({ createdAt: -1 }).limit(10);
+    res.json(candidates);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch latest candidates" });
+  }
+});
+
+app.get("/candidates/top", async (req, res) => {
+  try {
+    const candidates = await Candidate.find().sort({ score: -1 }).limit(10);
+    res.json(candidates);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch top candidates" });
+  }
+});
+
 mongoose.connect(process.env.MONGO_URI)
 .then(()=> console.log("MongoDB Connected"))
 .catch(err => console.log(err));

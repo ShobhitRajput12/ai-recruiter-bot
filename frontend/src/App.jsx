@@ -1,38 +1,72 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 function App() {
 
 const [files,setFiles] = useState([]);
 const [job,setJob] = useState("");
 const [candidates,setCandidates] = useState([]);
+const [latestCandidates,setLatestCandidates] = useState([]);
+const [topCandidates,setTopCandidates] = useState([]);
 const [question,setQuestion] = useState("");
 const [answer,setAnswer] = useState("");
+const [loading,setLoading] = useState(false);
+
+// Load candidates on component mount
+useEffect(() => {
+  loadCandidates();
+}, []);
+
+const loadCandidates = async () => {
+  try {
+    const [latestRes, topRes] = await Promise.all([
+      fetch("http://localhost:5000/candidates/latest"),
+      fetch("http://localhost:5000/candidates/top")
+    ]);
+    
+    const latestData = await latestRes.json();
+    const topData = await topRes.json();
+    
+    setLatestCandidates(latestData);
+    setTopCandidates(topData);
+  } catch (err) {
+    console.error("Failed to load candidates:", err);
+  }
+};
 
 const handleFileChange = (e)=>{
 setFiles(e.target.files);
 };
 
 const uploadResumes = async ()=>{
+  setLoading(true);
+  try {
+    const formData = new FormData();
 
-const formData = new FormData();
+    for(let i=0;i<files.length;i++){
+      formData.append("resumes",files[i]);
+    }
 
-for(let i=0;i<files.length;i++){
-formData.append("resumes",files[i]);
-}
+    formData.append("job",job);
 
-formData.append("job",job);
+    const res = await fetch("http://localhost:5000/upload",{
+      method:"POST",
+      body:formData
+    });
 
-const res = await fetch("http://localhost:5000/upload",{
-method:"POST",
-body:formData
-});
+    const data = await res.json();
 
-const data = await res.json();
+    data.candidates.sort((a,b)=>b.score-a.score);
 
-data.candidates.sort((a,b)=>b.score-a.score);
-
-setCandidates(data.candidates);
-
+    setCandidates(data.candidates);
+    
+    // Refresh the candidate lists
+    await loadCandidates();
+    
+  } catch (err) {
+    console.error("Upload failed:", err);
+  } finally {
+    setLoading(false);
+  }
 };
 
 const askChatbot = async ()=>{
@@ -50,6 +84,25 @@ const data = await res.json();
 setAnswer(data.answer);
 
 };
+
+// Candidate Card Component
+const CandidateCard = ({ candidate, showDate = false }) => (
+  <div className="border p-4 rounded mb-4 bg-gray-50">
+    <h3 className="font-semibold text-lg">{candidate.name}</h3>
+    <p className="mb-2 text-green-600 font-medium">Score: {candidate.score}/100</p>
+    <div className="w-full bg-gray-200 rounded h-4 mb-2">
+      <div
+        className="bg-green-500 h-4 rounded"
+        style={{width:`${candidate.score}%`}}
+      ></div>
+    </div>
+    {showDate && candidate.createdAt && (
+      <p className="text-sm text-gray-500">
+        Uploaded: {new Date(candidate.createdAt).toLocaleDateString()}
+      </p>
+    )}
+  </div>
+);
 
 return (
 
@@ -80,39 +133,47 @@ onChange={(e)=>setJob(e.target.value)}
 
 <button
 onClick={uploadResumes}
-className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+disabled={loading}
+className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-50"
 >
-Upload
+{loading ? "Uploading..." : "Upload"}
 </button>
 
 </div>
 
-{/* Candidates */}
+{/* Candidates Sections */}
 
-<div className="bg-white p-6 rounded-lg shadow mb-8">
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
 
-<h2 className="text-xl font-semibold mb-4">Top Candidates</h2>
+{/* Latest Candidates */}
+<div className="bg-white p-6 rounded-lg shadow">
+<h2 className="text-xl font-semibold mb-4">📅 Latest Candidates</h2>
+<p className="text-gray-600 mb-4">Recently uploaded resumes</p>
 
-{candidates.map((c,index)=>(
-
-<div key={index} className="border p-4 rounded mb-4">
-
-<h3 className="font-semibold">{c.name}</h3>
-
-<p className="mb-2">Score: {c.score}/100</p>
-
-<div className="w-full bg-gray-200 rounded h-4">
-
-<div
-className="bg-green-500 h-4 rounded"
-style={{width:`${c.score}%`}}
-></div>
+{latestCandidates.length === 0 ? (
+  <p className="text-gray-500">No candidates uploaded yet</p>
+) : (
+  latestCandidates.map((c,index)=>(
+    <CandidateCard key={index} candidate={c} showDate={true} />
+  ))
+)}
 
 </div>
 
-</div>
+{/* Top Candidates */}
+<div className="bg-white p-6 rounded-lg shadow">
+<h2 className="text-xl font-semibold mb-4">🏆 Top Candidates</h2>
+<p className="text-gray-600 mb-4">Ranked by highest scores</p>
 
-))}
+{topCandidates.length === 0 ? (
+  <p className="text-gray-500">No candidates available</p>
+) : (
+  topCandidates.map((c,index)=>(
+    <CandidateCard key={index} candidate={c} />
+  ))
+)}
+
+</div>
 
 </div>
 
