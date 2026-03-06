@@ -22,7 +22,7 @@ app.use("/candidates", candidatesRoute);
 app.get("/", (req, res) => {
   res.send("AI Recruiter Bot API Running");
 });
-git rm -r --cached frontend/.env
+
 app.get("/debug", (req,res)=>{
   res.send("Debug route working");
 });
