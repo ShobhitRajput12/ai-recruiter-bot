@@ -12,11 +12,28 @@ router.post("/", async (req, res) => {
 
     const candidates = await Candidate.find();
 
+    // Reduce prompt size by only sending the highest-scoring candidates and truncating resume text.
+    const MAX_CANDIDATES = 5;
+    const MAX_RESUME_CHARS = 400;
+
+    const candidatesSummary = candidates
+      .sort((a, b) => b.score - a.score)
+      .slice(0, MAX_CANDIDATES)
+      .map((c) => ({
+        name: c.name,
+        score: c.score,
+        resumeText: c.resumeText
+          ? `${c.resumeText.slice(0, MAX_RESUME_CHARS)}${
+              c.resumeText.length > MAX_RESUME_CHARS ? "...[truncated]" : ""
+            }`
+          : "",
+      }));
+
     const prompt = `
 You are an AI recruiter assistant.
 
-Candidates database:
-${JSON.stringify(candidates)}
+Here are the top ${MAX_CANDIDATES} candidates (highest score first):
+${JSON.stringify(candidatesSummary)}
 
 Recruiter question:
 ${question}
@@ -27,7 +44,7 @@ Answer naturally like a recruiter assistant.
     const response = await axios.post(
       "https://api.groq.com/openai/v1/chat/completions",
       {
-        model: "llama-3.3-70b-versatile",
+        model: "llama-3.1-8b-instant",
         messages: [
           { role: "user", content: prompt }
         ]
