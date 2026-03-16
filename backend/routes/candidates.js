@@ -10,9 +10,13 @@ const {
   ensureCandidateScoresForList
 } = require("../utils/ensureCandidateScores");
 const { getDisplayCandidateName } = require("../utils/candidateName");
+const authMiddleware = require("../middleware/auth");
+const mongoose = require("mongoose");
 
 const router = express.Router();
 const LIST_PROJECTION = "-resumeFile";
+
+router.use(authMiddleware);
 
 function resolveSortField(sortBy) {
   if (sortBy === "final_score") {
@@ -45,6 +49,7 @@ router.get("/groups", async (req, res) => {
     const groups = await Candidate.aggregate([
       {
         $match: {
+          userId: new mongoose.Types.ObjectId(req.user.id),
           groupName: { $exists: true, $ne: "" }
         }
       },
@@ -90,7 +95,7 @@ router.get("/", async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 0;
     const groupName =
       typeof req.query.groupName === "string" ? req.query.groupName.trim() : "";
-    const filters = groupName ? { groupName } : {};
+    const filters = groupName ? { groupName, userId: req.user.id } : { userId: req.user.id };
 
     const candidates = await Candidate.find(filters)
       .select(LIST_PROJECTION)
@@ -111,7 +116,7 @@ router.get("/latest", async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 5;
     const groupName =
       typeof req.query.groupName === "string" ? req.query.groupName.trim() : "";
-    const filters = groupName ? { groupName } : {};
+    const filters = groupName ? { groupName, userId: req.user.id } : { userId: req.user.id };
     const candidates = await Candidate.find(filters)
       .select(LIST_PROJECTION)
       .sort({ createdAt: -1 })
@@ -131,7 +136,7 @@ router.get("/top", async (req, res) => {
     const limit = parseInt(req.query.limit, 10) || 5;
     const groupName =
       typeof req.query.groupName === "string" ? req.query.groupName.trim() : "";
-    const filters = groupName ? { groupName } : {};
+    const filters = groupName ? { groupName, userId: req.user.id } : { userId: req.user.id };
     const candidates = await Candidate.find(filters)
       .select(LIST_PROJECTION)
       .sort({ finalScore: -1, totalScore: -1, score: -1 })
@@ -154,7 +159,10 @@ router.get("/top", async (req, res) => {
 // Get a candidate by id
 router.get("/:id", async (req, res) => {
   try {
-    const candidate = await Candidate.findById(req.params.id);
+    const candidate = await Candidate.findOne({
+      _id: req.params.id,
+      userId: req.user.id
+    });
 
     if (!candidate) {
       return res.status(404).json({ error: "Candidate not found" });
@@ -170,7 +178,10 @@ router.get("/:id", async (req, res) => {
 // Rescore a candidate against its saved job description and resume text
 router.post("/:id/rescore", async (req, res) => {
   try {
-    const candidate = await Candidate.findById(req.params.id);
+    const candidate = await Candidate.findOne({
+      _id: req.params.id,
+      userId: req.user.id
+    });
 
     if (!candidate) {
       return res.status(404).json({ error: "Candidate not found" });
@@ -215,7 +226,10 @@ router.post("/:id/rescore", async (req, res) => {
 // View a candidate's original resume file
 router.get("/:id/file", async (req, res) => {
   try {
-    const candidate = await Candidate.findById(req.params.id).select(
+    const candidate = await Candidate.findOne({
+      _id: req.params.id,
+      userId: req.user.id
+    }).select(
       "name originalFileName resumeMimeType resumeFile resumeText"
     );
 
@@ -257,7 +271,10 @@ router.get("/:id/file", async (req, res) => {
 // Delete a candidate by id
 router.delete("/:id", async (req, res) => {
   try {
-    const deletedCandidate = await Candidate.findByIdAndDelete(req.params.id);
+    const deletedCandidate = await Candidate.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.user.id
+    });
 
     if (!deletedCandidate) {
       return res.status(404).json({ error: "Candidate not found" });

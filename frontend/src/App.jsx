@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 import { jsPDF } from "jspdf";
 import { API_BASE_URL } from "./config";
 import "./App.css";
@@ -25,6 +25,10 @@ const DEFAULT_SCORE_WEIGHTS = {
   projects: 15,
   educationCertification: 15
 };
+
+const AUTH_TOKEN_KEY = "hirebud_ai_token";
+const USER_STORAGE_KEY = "user";
+const LEGACY_TOKEN_KEY = "token";
 
 function cleanLine(line) {
   return (line || "").replace(/\s+/g, " ").replace(/[_|]/g, " ").trim();
@@ -439,6 +443,25 @@ function CandidateCard({
 }
 
 function App() {
+  const [authToken, setAuthToken] = useState(
+    () => localStorage.getItem(AUTH_TOKEN_KEY) || ""
+  );
+  const [authMode, setAuthMode] = useState("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authConfirm, setAuthConfirm] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [storedUser, setStoredUser] = useState(() => {
+    try {
+      const raw = localStorage.getItem(USER_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
+  const userMenuRef = useRef(null);
   const [files, setFiles] = useState([]);
   const [job, setJob] = useState("");
   const [groupName, setGroupName] = useState("");
@@ -461,6 +484,92 @@ function App() {
   const [uploadSummary, setUploadSummary] = useState(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const latestFilesRef = useRef(files);
+  const [isJobGenOpen, setIsJobGenOpen] = useState(false);
+  const [jobGenErrors, setJobGenErrors] = useState({});
+  const [generatedJobDesc, setGeneratedJobDesc] = useState("");
+  const [jobGenData, setJobGenData] = useState({
+    title: "",
+    level: "",
+    employmentType: "",
+    workArrangement: "",
+    location: "",
+    timezone: "",
+    responsibilities: "",
+    impact: "",
+    mustHave: "",
+    niceToHave: "",
+    experience: "",
+    education: "",
+    salaryRange: "",
+    benefits: {
+      health: false,
+      equity: false,
+      remoteStipend: false,
+      learningBudget: false,
+      flexibleHours: false,
+      pto: false,
+      wfhEquipment: false,
+      bonus: false
+    },
+    benefitsOther: "",
+    companyDescription: "",
+    roleExcitement: ""
+    ,
+    priorities: [
+      "technicalSkills",
+      "softwareSoftSkills",
+      "experience",
+      "projects",
+      "educationCertification"
+    ]
+  });
+
+  function persistAuthToken(nextToken) {
+    setAuthToken(nextToken);
+    if (nextToken) {
+      localStorage.setItem(AUTH_TOKEN_KEY, nextToken);
+      localStorage.setItem(LEGACY_TOKEN_KEY, nextToken);
+    } else {
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(LEGACY_TOKEN_KEY);
+    }
+  }
+
+  function persistUser(nextUser) {
+    setStoredUser(nextUser);
+    if (nextUser) {
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser));
+    } else {
+      localStorage.removeItem(USER_STORAGE_KEY);
+    }
+  }
+
+  function handleLogout() {
+    persistAuthToken("");
+    persistUser(null);
+    window.location.href = "/login";
+  }
+
+  function buildAuthHeaders(baseHeaders = {}) {
+    const headers = { ...baseHeaders };
+    if (authToken) {
+      headers.Authorization = `Bearer ${authToken}`;
+    }
+    return headers;
+  }
+
+  async function fetchWithAuth(url, options = {}) {
+    const response = await fetch(url, {
+      ...options,
+      headers: buildAuthHeaders(options.headers || {})
+    });
+
+    if (response.status === 401) {
+      persistAuthToken("");
+    }
+
+    return response;
+  }
 
   const normalizedCandidateSearch = candidateSearch.trim().toLowerCase();
   const filteredLatestCandidates = latestCandidates.filter((candidate) => {
@@ -502,8 +611,195 @@ function App() {
   );
 
   useEffect(() => {
-    loadDashboard();
-  }, []);
+    if (authToken) {
+      loadDashboard();
+    }
+  }, [authToken]);
+
+  useEffect(() => {
+    if (!authToken) {
+      setLatestCandidates([]);
+      setTopCandidates([]);
+      setGroups([]);
+      setSelectedCandidateIds([]);
+    }
+  }, [authToken]);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setUserMenuOpen(false);
+      }
+    }
+
+    if (userMenuOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [userMenuOpen]);
+
+  function updateJobGenField(field, value) {
+    setJobGenData((current) => ({
+      ...current,
+      [field]: value
+    }));
+  }
+
+  function updateBenefit(field, checked) {
+    setJobGenData((current) => ({
+      ...current,
+      benefits: {
+        ...current.benefits,
+        [field]: checked
+      }
+    }));
+  }
+
+  function updatePriority(index, key) {
+    setJobGenData((current) => {
+      const currentOrder = Array.isArray(current.priorities)
+        ? [...current.priorities]
+        : [];
+
+      const filtered = currentOrder.filter((item) => item !== key);
+      const nextOrder = [...filtered];
+
+      nextOrder.splice(index, 0, key);
+
+      const requiredKeys = [
+        "technicalSkills",
+        "softwareSoftSkills",
+        "experience",
+        "projects",
+        "educationCertification"
+      ];
+
+      requiredKeys.forEach((requiredKey) => {
+        if (!nextOrder.includes(requiredKey)) {
+          nextOrder.push(requiredKey);
+        }
+      });
+
+      return {
+        ...current,
+        priorities: nextOrder.slice(0, requiredKeys.length)
+      };
+    });
+  }
+
+  function validateJobGen(data) {
+    const nextErrors = {};
+
+    if (!data.title.trim()) nextErrors.title = "Job title is required.";
+    if (!data.level) nextErrors.level = "Select a seniority level.";
+    if (!data.employmentType) nextErrors.employmentType = "Select employment type.";
+    if (!data.workArrangement) nextErrors.workArrangement = "Select work arrangement.";
+    if (!data.responsibilities.trim()) nextErrors.responsibilities = "Add responsibilities.";
+    if (!data.mustHave.trim()) nextErrors.mustHave = "List must-have skills.";
+
+    if (
+      (data.workArrangement === "Hybrid" || data.workArrangement === "On-site") &&
+      !data.location.trim()
+    ) {
+      nextErrors.location = "Location is required for hybrid or on-site roles.";
+    }
+
+    return nextErrors;
+  }
+
+  function buildJobDescription(data) {
+    const benefitsList = [];
+    if (data.benefits.health) benefitsList.push("Health insurance");
+    if (data.benefits.equity) benefitsList.push("Stock options / ESOP");
+    if (data.benefits.remoteStipend) benefitsList.push("Remote work stipend");
+    if (data.benefits.learningBudget) benefitsList.push("Learning budget");
+    if (data.benefits.flexibleHours) benefitsList.push("Flexible hours");
+    if (data.benefits.pto) benefitsList.push("Paid time off");
+    if (data.benefits.wfhEquipment) benefitsList.push("Work-from-home equipment");
+    if (data.benefits.bonus) benefitsList.push("Performance bonus");
+    if (data.benefitsOther.trim()) benefitsList.push(data.benefitsOther.trim());
+
+    const priorityLabels = {
+      technicalSkills: "Technical Skills",
+      softwareSoftSkills: "Soft Skills",
+      experience: "Experience",
+      projects: "Projects",
+      educationCertification: "Education / Certifications"
+    };
+
+    const order =
+      Array.isArray(data.priorities) && data.priorities.length === 5
+        ? data.priorities
+        : [
+            "technicalSkills",
+            "softwareSoftSkills",
+            "experience",
+            "projects",
+            "educationCertification"
+          ];
+
+    const priorityLines = order
+      .map((key, index) => {
+        const label = priorityLabels[key] || key;
+        const value = Number(scoreWeights[key] ?? 0);
+        return `${index + 1}. ${label} (${value}%)`;
+      })
+      .join("\n");
+
+    const sections = [
+      `Job Title\n${data.title.trim()}`,
+      `Company Overview\n${data.companyDescription.trim() || "Share your company mission and values."}`,
+      `About the Role\n${data.impact.trim() || "Define the primary goal and impact for this role."}`,
+      `Responsibilities\n${data.responsibilities.trim()}`,
+      `Required Skills\n${data.mustHave.trim()}`,
+      `Preferred Skills\n${data.niceToHave.trim() || "Nice-to-have skills and technologies."}`,
+      `Experience Required\n${data.experience || "No minimum"}` +
+        (data.education.trim() ? `\nEducation / Certifications\n${data.education.trim()}` : ""),
+      `Scoring Priorities\n${priorityLines || "Not specified"}`,
+      `Work Arrangement\n${data.workArrangement}`,
+      `Location\n${data.location.trim() || "Not specified"}`,
+      `Salary & Benefits\n${data.salaryRange.trim() || "Salary range to be discussed."}` +
+        `\nBenefits & Perks\n${benefitsList.length ? benefitsList.join(", ") : "Not specified"}`,
+      `Why Join Us\n${data.roleExcitement.trim() || "Highlight what makes this role exciting."}`
+    ];
+
+    return sections.join("\n\n");
+  }
+
+  function handleGenerateJobDescription() {
+    const nextErrors = validateJobGen(jobGenData);
+    setJobGenErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      return;
+    }
+
+    const jd = buildJobDescription(jobGenData);
+    setGeneratedJobDesc(jd);
+  }
+
+  async function handleCopyJobDescription() {
+    if (!generatedJobDesc.trim()) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(generatedJobDesc);
+      window.alert("Job description copied to clipboard.");
+    } catch (err) {
+      window.alert("Copy failed. Please select and copy manually.");
+    }
+  }
+
+  function handleUseJobDescription() {
+    if (!generatedJobDesc.trim()) {
+      return;
+    }
+    setJob(generatedJobDesc);
+    setIsJobGenOpen(false);
+  }
 
   useEffect(() => {
     latestFilesRef.current = files;
@@ -519,13 +815,66 @@ function App() {
     };
   }, []);
 
+  async function handleAuthSubmit(event) {
+    event.preventDefault();
+    setAuthError("");
+
+    if (authMode === "signup" && authPassword !== authConfirm) {
+      setAuthError("Passwords do not match.");
+      return;
+    }
+
+    setAuthLoading(true);
+
+    try {
+      const endpoint = authMode === "signup" ? "/auth/register" : "/auth/login";
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: authEmail.trim(),
+          password: authPassword
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Authentication failed");
+      }
+
+      if (!data.token) {
+        throw new Error("No token returned from server");
+      }
+
+      persistAuthToken(data.token);
+      if (data.user) {
+        persistUser(data.user);
+      } else {
+        persistUser({ email: authEmail.trim().toLowerCase() });
+      }
+      setAuthPassword("");
+      setAuthConfirm("");
+    } catch (err) {
+      setAuthError(err.message || "Authentication failed");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
   async function loadDashboard() {
     try {
       const [latestRes, topRes, groupsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/candidates/latest`),
-        fetch(`${API_BASE_URL}/candidates/top`),
-        fetch(`${API_BASE_URL}/candidates/groups`)
+        fetchWithAuth(`${API_BASE_URL}/candidates/latest`),
+        fetchWithAuth(`${API_BASE_URL}/candidates/top`),
+        fetchWithAuth(`${API_BASE_URL}/candidates/groups`)
       ]);
+
+      if (!latestRes.ok || !topRes.ok || !groupsRes.ok) {
+        throw new Error("Failed to load dashboard data");
+      }
 
       const [latestData, topData, groupData] = await Promise.all([
         latestRes.json(),
@@ -764,6 +1113,11 @@ function App() {
     setLoading(true);
 
     try {
+      if (!authToken) {
+        window.alert("Please sign in to upload resumes.");
+        return;
+      }
+
       if (!files.length) {
         window.alert("Please choose at least one resume file.");
         return;
@@ -785,7 +1139,7 @@ function App() {
       formData.append("groupName", groupName.trim());
       formData.append("weights", JSON.stringify(scoreWeights));
 
-      const res = await fetch(`${API_BASE_URL}/upload`, {
+      const res = await fetchWithAuth(`${API_BASE_URL}/upload`, {
         method: "POST",
         body: formData
       });
@@ -817,7 +1171,7 @@ function App() {
 
   async function askChatbot() {
     try {
-      const res = await fetch(`${API_BASE_URL}/chat`, {
+      const res = await fetchWithAuth(`${API_BASE_URL}/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -837,7 +1191,7 @@ function App() {
   }
 
   async function fetchCandidateDetails(candidateId) {
-    const res = await fetch(`${API_BASE_URL}/candidates/${candidateId}`);
+    const res = await fetchWithAuth(`${API_BASE_URL}/candidates/${candidateId}`);
 
     if (!res.ok) {
       let errorMessage = "Failed to load candidate details.";
@@ -869,7 +1223,7 @@ function App() {
     setDeletingIds((current) => [...current, candidateId]);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/candidates/${candidateId}`, {
+      const res = await fetchWithAuth(`${API_BASE_URL}/candidates/${candidateId}`, {
         method: "DELETE"
       });
 
@@ -973,7 +1327,7 @@ function App() {
       }
 
       const fileUrl = `${API_BASE_URL}/candidates/${candidate._id}/file`;
-      const res = await fetch(fileUrl);
+      const res = await fetchWithAuth(fileUrl);
 
       if (!res.ok) {
         let errorMessage = "Resume file is not available for this candidate.";
@@ -1011,11 +1365,127 @@ function App() {
     }
   }
 
+  const userEmail = storedUser?.email || "";
+  const userInitial = userEmail ? userEmail.charAt(0).toUpperCase() : "U";
+
+  if (!authToken) {
+    return (
+      <div className="app-shell">
+        <section className="hero-panel">
+          <div>
+            <p className="eyebrow">Hirebud AI</p>
+            <h1>
+              {authMode === "login"
+                ? "Sign in to your hiring workspace."
+                : "Create your Hirebud AI account."}
+            </h1>
+            <p className="hero-copy">
+              Access your pipelines, resumes, and candidate insights securely.
+            </p>
+          </div>
+          <div className="panel">
+            <div className="panel-heading">
+              <div>
+                <p className="panel-kicker">
+                  {authMode === "login" ? "Login" : "Sign up"}
+                </p>
+                <h2>
+                  {authMode === "login"
+                    ? "Welcome back"
+                    : "Start screening smarter"}
+                </h2>
+              </div>
+            </div>
+            <form onSubmit={handleAuthSubmit}>
+              <label className="field">
+                <span>Email</span>
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={(event) => setAuthEmail(event.target.value)}
+                  placeholder="you@company.com"
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                  placeholder="At least 8 characters"
+                  required
+                />
+              </label>
+              {authMode === "signup" && (
+                <label className="field">
+                  <span>Confirm password</span>
+                  <input
+                    type="password"
+                    value={authConfirm}
+                    onChange={(event) => setAuthConfirm(event.target.value)}
+                    placeholder="Re-enter password"
+                    required
+                  />
+                </label>
+              )}
+              {authError && (
+                <p className="helper-text weight-warning">{authError}</p>
+              )}
+              <div className="action-row">
+                <button type="submit" className="primary-button" disabled={authLoading}>
+                  {authLoading
+                    ? "Please wait..."
+                    : authMode === "login"
+                      ? "Sign in"
+                      : "Create account"}
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => {
+                    setAuthMode(authMode === "login" ? "signup" : "login");
+                    setAuthError("");
+                  }}
+                >
+                  {authMode === "login" ? "Need an account?" : "Already have an account?"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
+      <header className="top-nav m-1">
+        <div className="app-title left">Hirebud AI</div>
+        <div className="app-title spacer" aria-hidden="true" />
+        <div className="user-menu" ref={userMenuRef}>
+          <button
+            type="button"
+            className="avatar-button"
+            onClick={() => setUserMenuOpen((open) => !open)}
+            aria-haspopup="true"
+            aria-expanded={userMenuOpen}
+          >
+            {userInitial}
+          </button>
+          {userMenuOpen && (
+            <div className="user-dropdown">
+              <div className="user-email">{userEmail || "shobhit@gmail.com"}</div>
+              <button type="button" className="logout-button" onClick={handleLogout}>
+                Logout
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
       <section className="hero-panel">
         <div>
-          <p className="eyebrow">Recruitment AI workspace</p>
+          <p className="eyebrow">Hirebud AI workspace</p>
           <h1>Group resumes, preview uploads, and review stronger candidate signals.</h1>
           <p className="hero-copy">
             Build role-based pipelines such as Digital Marketer or Content Creator,
@@ -1043,7 +1513,7 @@ function App() {
         <div className="panel panel-upload">
           <div className="panel-heading">
             <div>
-              <p className="panel-kicker">Upload pipeline</p>
+              <p className="panel-kicker">Upload</p>
               <h2>Upload resumes by group</h2>
             </div>
             <span className="candidate-chip neutral">
@@ -1091,6 +1561,13 @@ function App() {
 
           <label className="field">
             <span>Common job description</span>
+            <button
+              type="button"
+              className="secondary-button jd-generator-button"
+              onClick={() => setIsJobGenOpen(true)}
+            >
+              Generate Job Description
+            </button>
             <textarea
               placeholder="Paste the shared job description for this whole resume group"
               rows="6"
@@ -1314,7 +1791,7 @@ function App() {
           </div>
 
           <div className="chat-panel">
-            <p className="panel-kicker">Recruiter chat</p>
+            <p className="panel-kicker">Hirebud AI chat</p>
             <h3>Ask about {(selectedGroupFilter || "all groups").toLowerCase()}</h3>
             <input
               type="text"
@@ -1474,6 +1951,375 @@ function App() {
                 className="secondary-button"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isJobGenOpen && (
+        <div className="modal-backdrop" onClick={() => setIsJobGenOpen(false)}>
+          <div className="jobgen-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="jobgen-header">
+              <div>
+                <p className="panel-kicker">Job description generator</p>
+                <h3>Generate a structured job description</h3>
+              </div>
+            </div>
+
+            <div className="jobgen-body">
+              <section className="jobgen-section">
+                <h4>Role Basics</h4>
+                <label className="field">
+                  <span>Job Title *</span>
+                  <input
+                    type="text"
+                    value={jobGenData.title}
+                    onChange={(event) => updateJobGenField("title", event.target.value)}
+                  />
+                  {jobGenErrors.title && (
+                    <p className="helper-text weight-warning">{jobGenErrors.title}</p>
+                  )}
+                </label>
+                <label className="field">
+                  <span>Job Level / Seniority *</span>
+                  <select
+                    className="candidate-search-input"
+                    value={jobGenData.level}
+                    onChange={(event) => updateJobGenField("level", event.target.value)}
+                  >
+                    <option value="">Select level</option>
+                    <option value="Intern">Intern</option>
+                    <option value="Entry-Level / Junior">Entry-Level / Junior</option>
+                    <option value="Mid-Level">Mid-Level</option>
+                    <option value="Senior">Senior</option>
+                    <option value="Lead / Staff">Lead / Staff</option>
+                    <option value="Manager">Manager</option>
+                    <option value="Director / Head">Director / Head</option>
+                    <option value="VP / C-level">VP / C-level</option>
+                    <option value="Other">Other</option>
+                  </select>
+                  {jobGenErrors.level && (
+                    <p className="helper-text weight-warning">{jobGenErrors.level}</p>
+                  )}
+                </label>
+                <label className="field">
+                  <span>Employment Type *</span>
+                  <select
+                    className="candidate-search-input"
+                    value={jobGenData.employmentType}
+                    onChange={(event) => updateJobGenField("employmentType", event.target.value)}
+                  >
+                    <option value="">Select type</option>
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contract / Freelance">Contract / Freelance</option>
+                    <option value="Internship">Internship</option>
+                  </select>
+                  {jobGenErrors.employmentType && (
+                    <p className="helper-text weight-warning">
+                      {jobGenErrors.employmentType}
+                    </p>
+                  )}
+                </label>
+              </section>
+
+              <section className="jobgen-section">
+                <h4>Location & Schedule</h4>
+                <label className="field">
+                  <span>Work Arrangement *</span>
+                  <select
+                    className="candidate-search-input"
+                    value={jobGenData.workArrangement}
+                    onChange={(event) => updateJobGenField("workArrangement", event.target.value)}
+                  >
+                    <option value="">Select arrangement</option>
+                    <option value="Remote">Remote</option>
+                    <option value="Hybrid">Hybrid</option>
+                    <option value="On-site">On-site</option>
+                  </select>
+                  {jobGenErrors.workArrangement && (
+                    <p className="helper-text weight-warning">
+                      {jobGenErrors.workArrangement}
+                    </p>
+                  )}
+                </label>
+                <label className="field">
+                  <span>Office Location *</span>
+                  <input
+                    type="text"
+                    placeholder="e.g. Chennai, Tamil Nadu"
+                    value={jobGenData.location}
+                    onChange={(event) => updateJobGenField("location", event.target.value)}
+                  />
+                  {jobGenErrors.location && (
+                    <p className="helper-text weight-warning">{jobGenErrors.location}</p>
+                  )}
+                </label>
+                <label className="field">
+                  <span>Timezone / Working hours overlap</span>
+                  <input
+                    type="text"
+                    value={jobGenData.timezone}
+                    onChange={(event) => updateJobGenField("timezone", event.target.value)}
+                  />
+                </label>
+              </section>
+
+              <section className="jobgen-section">
+                <h4>Responsibilities</h4>
+                <label className="field">
+                  <span>Main responsibilities *</span>
+                  <textarea
+                    rows="5"
+                    placeholder="Use bullet points"
+                    value={jobGenData.responsibilities}
+                    onChange={(event) => updateJobGenField("responsibilities", event.target.value)}
+                  />
+                  {jobGenErrors.responsibilities && (
+                    <p className="helper-text weight-warning">
+                      {jobGenErrors.responsibilities}
+                    </p>
+                  )}
+                </label>
+                <label className="field">
+                  <span>Primary goal or biggest impact expected</span>
+                  <textarea
+                    rows="3"
+                    value={jobGenData.impact}
+                    onChange={(event) => updateJobGenField("impact", event.target.value)}
+                  />
+                </label>
+              </section>
+
+              <section className="jobgen-section">
+                <h4>Requirements</h4>
+                <label className="field">
+                  <span>Must-have skills / technologies *</span>
+                  <textarea
+                    rows="4"
+                    value={jobGenData.mustHave}
+                    onChange={(event) => updateJobGenField("mustHave", event.target.value)}
+                  />
+                  {jobGenErrors.mustHave && (
+                    <p className="helper-text weight-warning">{jobGenErrors.mustHave}</p>
+                  )}
+                </label>
+                <label className="field">
+                  <span>Nice-to-have skills</span>
+                  <textarea
+                    rows="3"
+                    value={jobGenData.niceToHave}
+                    onChange={(event) => updateJobGenField("niceToHave", event.target.value)}
+                  />
+                </label>
+                <label className="field">
+                  <span>Minimum years of experience</span>
+                  <select
+                    className="candidate-search-input"
+                    value={jobGenData.experience}
+                    onChange={(event) => updateJobGenField("experience", event.target.value)}
+                  >
+                    <option value="">Select</option>
+                    <option value="No minimum">No minimum</option>
+                    <option value="1–2 years">1–2 years</option>
+                    <option value="3–5 years">3–5 years</option>
+                    <option value="5–8 years">5–8 years</option>
+                    <option value="8+ years">8+ years</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Education / certifications</span>
+                  <textarea
+                    rows="3"
+                    value={jobGenData.education}
+                    onChange={(event) => updateJobGenField("education", event.target.value)}
+                  />
+                </label>
+              </section>
+
+              <section className="jobgen-section">
+                <h4>Scoring Priorities</h4>
+                <div className="jobgen-priority-grid">
+                  {[
+                    "technicalSkills",
+                    "softwareSoftSkills",
+                    "experience",
+                    "projects",
+                    "educationCertification"
+                  ].map((key, index) => (
+                    <label className="field" key={`priority-${index}`}>
+                      <span>Priority {index + 1}</span>
+                      <select
+                        className="candidate-search-input"
+                        value={jobGenData.priorities?.[index] || key}
+                        onChange={(event) => updatePriority(index, event.target.value)}
+                      >
+                        <option value="technicalSkills">Technical Skills</option>
+                        <option value="softwareSoftSkills">Soft Skills</option>
+                        <option value="experience">Experience</option>
+                        <option value="projects">Projects</option>
+                        <option value="educationCertification">
+                          Education / Certifications
+                        </option>
+                      </select>
+                    </label>
+                  ))}
+                </div>
+              </section>
+
+              <section className="jobgen-section">
+                <h4>Compensation & Benefits</h4>
+                <label className="field">
+                  <span>Salary range</span>
+                  <input
+                    type="text"
+                    value={jobGenData.salaryRange}
+                    onChange={(event) => updateJobGenField("salaryRange", event.target.value)}
+                  />
+                </label>
+                <div className="jobgen-checkboxes">
+                  <label className="candidate-select-row">
+                    <input
+                      type="checkbox"
+                      checked={jobGenData.benefits.health}
+                      onChange={(event) => updateBenefit("health", event.target.checked)}
+                    />
+                    <span>Health insurance</span>
+                  </label>
+                  <label className="candidate-select-row">
+                    <input
+                      type="checkbox"
+                      checked={jobGenData.benefits.equity}
+                      onChange={(event) => updateBenefit("equity", event.target.checked)}
+                    />
+                    <span>Stock options / ESOP</span>
+                  </label>
+                  <label className="candidate-select-row">
+                    <input
+                      type="checkbox"
+                      checked={jobGenData.benefits.remoteStipend}
+                      onChange={(event) => updateBenefit("remoteStipend", event.target.checked)}
+                    />
+                    <span>Remote work stipend</span>
+                  </label>
+                  <label className="candidate-select-row">
+                    <input
+                      type="checkbox"
+                      checked={jobGenData.benefits.learningBudget}
+                      onChange={(event) => updateBenefit("learningBudget", event.target.checked)}
+                    />
+                    <span>Learning budget</span>
+                  </label>
+                  <label className="candidate-select-row">
+                    <input
+                      type="checkbox"
+                      checked={jobGenData.benefits.flexibleHours}
+                      onChange={(event) => updateBenefit("flexibleHours", event.target.checked)}
+                    />
+                    <span>Flexible hours</span>
+                  </label>
+                  <label className="candidate-select-row">
+                    <input
+                      type="checkbox"
+                      checked={jobGenData.benefits.pto}
+                      onChange={(event) => updateBenefit("pto", event.target.checked)}
+                    />
+                    <span>Paid time off</span>
+                  </label>
+                  <label className="candidate-select-row">
+                    <input
+                      type="checkbox"
+                      checked={jobGenData.benefits.wfhEquipment}
+                      onChange={(event) => updateBenefit("wfhEquipment", event.target.checked)}
+                    />
+                    <span>Work-from-home equipment</span>
+                  </label>
+                  <label className="candidate-select-row">
+                    <input
+                      type="checkbox"
+                      checked={jobGenData.benefits.bonus}
+                      onChange={(event) => updateBenefit("bonus", event.target.checked)}
+                    />
+                    <span>Performance bonus</span>
+                  </label>
+                </div>
+                <label className="field">
+                  <span>Other (optional)</span>
+                  <input
+                    type="text"
+                    value={jobGenData.benefitsOther}
+                    onChange={(event) => updateJobGenField("benefitsOther", event.target.value)}
+                  />
+                </label>
+              </section>
+
+              <section className="jobgen-section">
+                <h4>Company & Culture</h4>
+                <label className="field">
+                  <span>Company description / mission</span>
+                  <textarea
+                    rows="4"
+                    value={jobGenData.companyDescription}
+                    onChange={(event) =>
+                      updateJobGenField("companyDescription", event.target.value)
+                    }
+                  />
+                </label>
+                <label className="field">
+                  <span>What makes this role exciting</span>
+                  <textarea
+                    rows="3"
+                    value={jobGenData.roleExcitement}
+                    onChange={(event) =>
+                      updateJobGenField("roleExcitement", event.target.value)
+                    }
+                  />
+                </label>
+              </section>
+
+              <section className="jobgen-section">
+                <h4>Preview</h4>
+                <textarea
+                  className="jobgen-preview"
+                  rows="10"
+                  value={generatedJobDesc}
+                  onChange={(event) => setGeneratedJobDesc(event.target.value)}
+                  placeholder="Generated job description will appear here."
+                />
+                <div className="action-row">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleCopyJobDescription}
+                  >
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleUseJobDescription}
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </section>
+            </div>
+
+            <div className="action-row jobgen-footer">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setIsJobGenOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={handleGenerateJobDescription}
+              >
+                Generate Job Description
               </button>
             </div>
           </div>

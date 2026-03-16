@@ -1,8 +1,11 @@
 const express = require("express");
 const axios = require("axios");
 const Candidate = require("../models/Candidate");
+const authMiddleware = require("../middleware/auth");
 
 const router = express.Router();
+
+router.use(authMiddleware);
 
 router.post("/", async (req, res) => {
   try {
@@ -12,7 +15,10 @@ router.post("/", async (req, res) => {
       typeof req.body.groupName === "string" ? req.body.groupName.trim() : "";
     console.log("Chat request received:", question);
 
-    const candidates = await Candidate.find(groupName ? { groupName } : {});
+    const filters = groupName
+      ? { groupName, userId: req.user.id }
+      : { userId: req.user.id };
+    const candidates = await Candidate.find(filters);
 
     // Reduce prompt size by only sending the highest-scoring candidates and truncating resume text.
     const MAX_CANDIDATES = 5;
@@ -57,34 +63,42 @@ ${question}
 Answer naturally like a recruiter assistant.
 `;
 
-    const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+    const model = process.env.GEMINI_MODEL || "gemini-3-flash-preview";
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: "GEMINI_API_KEY is not set" });
+    }
 
     const response = await axios.post(
-      "https://api.groq.com/openai/v1/chat/completions",
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       {
-        model,
-        messages: [
-          { role: "user", content: prompt }
+        contents: [
+          {
+            parts: [{ text: prompt }]
+          }
         ]
       },
       {
         headers: {
-          "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
+          "x-goog-api-key": apiKey,
           "Content-Type": "application/json"
         }
       }
     );
 
-    const answer = response.data.choices[0].message.content;
+    const answer =
+      response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    res.json({ answer });
+    res.json({ answer: answer || "No answer received." });
 
   } catch (err) {
     console.error("Chat Error Details:", {
       message: err.message,
       status: err.response?.status,
       data: err.response?.data,
-      apiKey: process.env.GROQ_API_KEY ? "SET" : "NOT SET"
+      apiKey: process.env.GEMINI_API_KEY ? "SET" : "NOT SET",
+      model: process.env.GEMINI_MODEL || "gemini-3-flash-preview"
     });
     res.status(500).json({ error: "Chatbot failed" });
   }

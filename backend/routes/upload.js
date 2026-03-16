@@ -9,8 +9,11 @@ const {
 } = require("../utils/aiScore");
 const Candidate = require("../models/Candidate");
 const { extractCandidateNameFromResume } = require("../utils/candidateName");
+const authMiddleware = require("../middleware/auth");
 
 const router = express.Router();
+
+router.use(authMiddleware);
 
 function toApiCandidate(candidate) {
   const plainCandidate = candidate.toObject ? candidate.toObject() : candidate;
@@ -195,6 +198,7 @@ router.post("/", upload.array("resumes"), async (req, res) => {
         const validatedScores = generateCandidateRemarks(aiResult, scoringWeights);
 
         const existing = await Candidate.findOne({
+          userId: req.user.id,
           job,
           groupName,
           $or: [
@@ -228,6 +232,7 @@ router.post("/", upload.array("resumes"), async (req, res) => {
           console.log("Duplicate resume updated:", file.originalname);
         } else {
           candidate = new Candidate({
+            userId: req.user.id,
             name: displayName,
             originalFileName: file.originalname,
             groupName,

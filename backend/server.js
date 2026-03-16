@@ -9,12 +9,21 @@ require("dotenv").config({ path: path.resolve(__dirname, ".env") });
 const uploadRoute = require("./routes/upload");
 const chatRoute = require("./routes/chat");
 const candidatesRoute = require("./routes/candidates");
+const authRoute = require("./routes/auth");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
+if (!process.env.JWT_SECRET) {
+  console.warn(
+    "WARNING: JWT_SECRET is not set. Using a temporary development secret."
+  );
+  process.env.JWT_SECRET = "dev-secret-change-me";
+}
+
+app.use("/auth", authRoute);
 app.use("/upload", uploadRoute);
 app.use("/chat", chatRoute);
 app.use("/candidates", candidatesRoute);
