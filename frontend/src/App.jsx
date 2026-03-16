@@ -1403,7 +1403,7 @@ function App() {
                   type="email"
                   value={authEmail}
                   onChange={(event) => setAuthEmail(event.target.value)}
-                  placeholder="you@company.com"
+                  placeholder="xyz@gmail.com"
                   required
                 />
               </label>
@@ -1475,7 +1475,7 @@ function App() {
           </button>
           {userMenuOpen && (
             <div className="user-dropdown">
-              <div className="user-email">{userEmail || "shobhit@gmail.com"}</div>
+              <div className="user-email">{userEmail || "user@gmail.com"}</div>
               <button type="button" className="logout-button" onClick={handleLogout}>
                 Logout
               </button>
