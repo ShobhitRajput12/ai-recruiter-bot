@@ -452,6 +452,17 @@ function App() {
   const [authConfirm, setAuthConfirm] = useState("");
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [signupStep, setSignupStep] = useState("form");
+  const [signupOtp, setSignupOtp] = useState("");
+  const [signupMessage, setSignupMessage] = useState("");
+  const [isResetOpen, setIsResetOpen] = useState(false);
+  const [resetStep, setResetStep] = useState("request");
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetOtp, setResetOtp] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetMessage, setResetMessage] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [storedUser, setStoredUser] = useState(() => {
     try {
@@ -815,12 +826,128 @@ function App() {
     };
   }, []);
 
+  function openResetModal() {
+    setIsResetOpen(true);
+    setResetStep("request");
+    setResetEmail(authEmail.trim());
+    setResetOtp("");
+    setResetPassword("");
+    setResetMessage("");
+    setResetError("");
+  }
+
+  function closeResetModal() {
+    setIsResetOpen(false);
+    setResetStep("request");
+    setResetEmail("");
+    setResetOtp("");
+    setResetPassword("");
+    setResetMessage("");
+    setResetError("");
+    setResetLoading(false);
+  }
+
+  async function handleForgotPasswordSubmit(event) {
+    event.preventDefault();
+    setResetError("");
+    setResetMessage("");
+
+    if (!resetEmail.trim()) {
+      setResetError("Email is required.");
+      return;
+    }
+
+    setResetLoading(true);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: resetEmail.trim()
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to send OTP");
+      }
+
+      setResetMessage("OTP sent to your email");
+      setResetStep("verify");
+    } catch (err) {
+      setResetError(err.message || "Failed to send OTP");
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  async function handleResetPasswordSubmit(event) {
+    event.preventDefault();
+    setResetError("");
+    setResetMessage("");
+
+    if (!resetEmail.trim() || !resetOtp.trim() || !resetPassword) {
+      setResetError("Email, OTP, and new password are required.");
+      return;
+    }
+
+    if (resetPassword.length < 8) {
+      setResetError("Password must be at least 8 characters.");
+      return;
+    }
+
+    setResetLoading(true);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: resetEmail.trim(),
+          otp: resetOtp.trim(),
+          newPassword: resetPassword
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to reset password");
+      }
+
+      setResetMessage("Password reset successfully. Please sign in.");
+      setResetStep("done");
+      setAuthEmail(resetEmail.trim());
+      setAuthPassword("");
+      setAuthConfirm("");
+      setAuthMode("login");
+    } catch (err) {
+      setResetError(err.message || "Failed to reset password");
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
   async function handleAuthSubmit(event) {
     event.preventDefault();
     setAuthError("");
 
+    if (authMode === "signup") {
+      setSignupMessage("");
+    }
+
     if (authMode === "signup" && authPassword !== authConfirm) {
       setAuthError("Passwords do not match.");
+      return;
+    }
+    if (authMode === "signup" && authPassword.length < 8) {
+      setAuthError("Password must be at least 8 characters.");
       return;
     }
 
@@ -845,6 +972,15 @@ function App() {
         throw new Error(data.error || "Authentication failed");
       }
 
+      if (authMode === "signup") {
+        if (data.verificationRequired) {
+          setSignupStep("otp");
+          setSignupMessage(data.message || "OTP sent to your email");
+          return;
+        }
+        throw new Error("No OTP response from server");
+      }
+
       if (!data.token) {
         throw new Error("No token returned from server");
       }
@@ -859,6 +995,93 @@ function App() {
       setAuthConfirm("");
     } catch (err) {
       setAuthError(err.message || "Authentication failed");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleSignupOtpVerify(event) {
+    event.preventDefault();
+    setAuthError("");
+
+    if (!authEmail.trim() || !signupOtp.trim()) {
+      setAuthError("Email and OTP are required.");
+      return;
+    }
+
+    setAuthLoading(true);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/verify-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: authEmail.trim(),
+          otp: signupOtp.trim()
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Invalid or expired OTP");
+      }
+
+      if (!data.token) {
+        throw new Error("No token returned from server");
+      }
+
+      persistAuthToken(data.token);
+      if (data.user) {
+        persistUser(data.user);
+      } else {
+        persistUser({ email: authEmail.trim().toLowerCase() });
+      }
+
+      setSignupMessage("Email verified. Redirecting...");
+      setSignupOtp("");
+      setSignupStep("form");
+      setAuthPassword("");
+      setAuthConfirm("");
+    } catch (err) {
+      setAuthError(err.message || "OTP verification failed");
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleSignupResendOtp() {
+    setAuthError("");
+
+    if (!authEmail.trim()) {
+      setAuthError("Email is required to resend OTP.");
+      return;
+    }
+
+    setAuthLoading(true);
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/resend-otp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          email: authEmail.trim()
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to resend OTP");
+      }
+
+      setSignupMessage("OTP sent to your email");
+    } catch (err) {
+      setAuthError(err.message || "Failed to resend OTP");
     } finally {
       setAuthLoading(false);
     }
@@ -1367,6 +1590,10 @@ function App() {
 
   const userEmail = storedUser?.email || "";
   const userInitial = userEmail ? userEmail.charAt(0).toUpperCase() : "U";
+  const signupPasswordMismatch =
+    authMode === "signup" && authPassword && authConfirm && authPassword !== authConfirm;
+  const signupPasswordTooShort =
+    authMode === "signup" && authPassword && authPassword.length < 8;
 
   if (!authToken) {
     return (
@@ -1396,7 +1623,13 @@ function App() {
                 </h2>
               </div>
             </div>
-            <form onSubmit={handleAuthSubmit}>
+            <form
+              onSubmit={
+                authMode === "signup" && signupStep === "otp"
+                  ? handleSignupOtpVerify
+                  : handleAuthSubmit
+              }
+            >
               <label className="field">
                 <span>Email</span>
                 <input
@@ -1405,19 +1638,58 @@ function App() {
                   onChange={(event) => setAuthEmail(event.target.value)}
                   placeholder="xyz@gmail.com"
                   required
+                  disabled={authMode === "signup" && signupStep === "otp"}
                 />
               </label>
-              <label className="field">
-                <span>Password</span>
-                <input
-                  type="password"
-                  value={authPassword}
-                  onChange={(event) => setAuthPassword(event.target.value)}
-                  placeholder="At least 8 characters"
-                  required
-                />
-              </label>
-              {authMode === "signup" && (
+              {authMode === "signup" && signupStep === "otp" && (
+                <label className="field">
+                  <span>OTP</span>
+                  <input
+                    type="text"
+                    value={signupOtp}
+                    onChange={(event) => setSignupOtp(event.target.value)}
+                    placeholder="6-digit code"
+                    required
+                  />
+                </label>
+              )}
+              {authMode !== "login" && signupStep === "form" ? (
+                <label className="field">
+                  <span>Password</span>
+                  <input
+                    type="password"
+                    value={authPassword}
+                    onChange={(event) => setAuthPassword(event.target.value)}
+                    placeholder="At least 8 characters"
+                    required
+                  />
+                </label>
+              ) : (
+                authMode === "login" && (
+                  <label className="field">
+                    <span>Password</span>
+                    <input
+                      type="password"
+                      value={authPassword}
+                      onChange={(event) => setAuthPassword(event.target.value)}
+                      placeholder="At least 8 characters"
+                      required
+                    />
+                  </label>
+                )
+              )}
+              {authMode === "login" && (
+                <div className="forgot-row">
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={openResetModal}
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+              )}
+              {authMode === "signup" && signupStep === "form" && (
                 <label className="field">
                   <span>Confirm password</span>
                   <input
@@ -1429,16 +1701,38 @@ function App() {
                   />
                 </label>
               )}
+              {authMode === "signup" && signupStep === "form" && signupPasswordTooShort && (
+                <p className="helper-text weight-warning">
+                  Password must be at least 8 characters.
+                </p>
+              )}
+              {authMode === "signup" && signupStep === "form" && signupPasswordMismatch && (
+                <p className="helper-text weight-warning">Passwords do not match.</p>
+              )}
+              {authMode === "signup" && signupMessage && (
+                <p className="helper-text success-text">{signupMessage}</p>
+              )}
               {authError && (
                 <p className="helper-text weight-warning">{authError}</p>
               )}
               <div className="action-row">
-                <button type="submit" className="primary-button" disabled={authLoading}>
+                <button
+                  type="submit"
+                  className="primary-button"
+                  disabled={
+                    authLoading ||
+                    (authMode === "signup" &&
+                      signupStep === "form" &&
+                      (signupPasswordMismatch || signupPasswordTooShort))
+                  }
+                >
                   {authLoading
                     ? "Please wait..."
-                    : authMode === "login"
-                      ? "Sign in"
-                      : "Create account"}
+                    : authMode === "signup" && signupStep === "otp"
+                      ? "Verify OTP"
+                      : authMode === "login"
+                        ? "Sign in"
+                        : "Create account"}
                 </button>
                 <button
                   type="button"
@@ -1446,14 +1740,127 @@ function App() {
                   onClick={() => {
                     setAuthMode(authMode === "login" ? "signup" : "login");
                     setAuthError("");
+                    setSignupStep("form");
+                    setSignupOtp("");
+                    setSignupMessage("");
                   }}
                 >
                   {authMode === "login" ? "Need an account?" : "Already have an account?"}
                 </button>
               </div>
+              {authMode === "signup" && signupStep === "otp" && (
+                <div className="forgot-row">
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={handleSignupResendOtp}
+                    disabled={authLoading}
+                  >
+                    Resend OTP
+                  </button>
+                </div>
+              )}
             </form>
           </div>
         </section>
+        {isResetOpen && (
+          <div className="modal-backdrop" onClick={closeResetModal}>
+            <div className="pdf-modal" onClick={(event) => event.stopPropagation()}>
+              <p className="panel-kicker">Reset password</p>
+              <h3>Forgot your password?</h3>
+              {resetMessage && (
+                <p className="helper-text success-text">{resetMessage}</p>
+              )}
+              {resetError && (
+                <p className="helper-text weight-warning">{resetError}</p>
+              )}
+
+              {resetStep === "request" && (
+                <form onSubmit={handleForgotPasswordSubmit}>
+                  <label className="field">
+                    <span>Email</span>
+                    <input
+                      type="email"
+                      value={resetEmail}
+                      onChange={(event) => setResetEmail(event.target.value)}
+                      placeholder="you@company.com"
+                      required
+                    />
+                  </label>
+                  <div className="action-row">
+                    <button
+                      type="submit"
+                      className="primary-button"
+                      disabled={resetLoading}
+                    >
+                      {resetLoading ? "Sending..." : "Send OTP"}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={closeResetModal}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {resetStep === "verify" && (
+                <form onSubmit={handleResetPasswordSubmit}>
+                  <label className="field">
+                    <span>OTP</span>
+                    <input
+                      type="text"
+                      value={resetOtp}
+                      onChange={(event) => setResetOtp(event.target.value)}
+                      placeholder="6-digit code"
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span>New password</span>
+                    <input
+                      type="password"
+                      value={resetPassword}
+                      onChange={(event) => setResetPassword(event.target.value)}
+                      placeholder="At least 8 characters"
+                      required
+                    />
+                  </label>
+                  <div className="action-row">
+                    <button
+                      type="submit"
+                      className="primary-button"
+                      disabled={resetLoading}
+                    >
+                      {resetLoading ? "Resetting..." : "Reset Password"}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={closeResetModal}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {resetStep === "done" && (
+                <div className="action-row">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={closeResetModal}
+                  >
+                    Back to login
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   }

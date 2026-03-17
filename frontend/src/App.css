@@ -381,6 +381,31 @@ body {
   margin-top: 14px;
 }
 
+.helper-text.success-text {
+  color: #1f6a5f;
+}
+
+.forgot-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -6px;
+  margin-bottom: 10px;
+}
+
+.text-button {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: #1f6a5f;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.text-button:hover {
+  color: #174f46;
+}
+
 .jd-generator-button {
   margin-bottom: 12px;
 }
