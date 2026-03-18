@@ -9,6 +9,11 @@ An intelligent recruiter chatbot that uses AI to analyze candidate data and answ
 - **File Upload**: Support for uploading candidate CVs (PDF and Word documents)
 - **Real-Time Responses**: Fast API responses using Groq's optimized models
 
+## Documentation
+
+- Technical documentation: `TECHNICAL.md`
+- User guide: `USER_GUIDE.md`
+
 ## Tech Stack
 
 ### Backend

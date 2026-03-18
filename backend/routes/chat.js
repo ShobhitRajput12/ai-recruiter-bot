@@ -10,10 +10,14 @@ router.use(authMiddleware);
 router.post("/", async (req, res) => {
   try {
 
-    const question = req.body.question;
+    const question = typeof req.body.question === "string" ? req.body.question.trim() : "";
     const groupName =
       typeof req.body.groupName === "string" ? req.body.groupName.trim() : "";
     console.log("Chat request received:", question);
+
+    if (!question) {
+      return res.status(400).json({ error: "Question is required." });
+    }
 
     const filters = groupName
       ? { groupName, userId: req.user.id }
@@ -83,14 +87,27 @@ Answer naturally like a recruiter assistant.
         headers: {
           "x-goog-api-key": apiKey,
           "Content-Type": "application/json"
-        }
+        },
+        timeout: 30000
       }
     );
 
     const answer =
       response.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    res.json({ answer: answer || "No answer received." });
+    if (!answer) {
+      const finishReason = response.data?.candidates?.[0]?.finishReason;
+      const promptFeedback = response.data?.promptFeedback;
+      return res.status(502).json({
+        error: "No answer received from Gemini.",
+        details: {
+          finishReason,
+          promptFeedback
+        }
+      });
+    }
+
+    res.json({ answer });
 
   } catch (err) {
     console.error("Chat Error Details:", {

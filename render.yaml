@@ -10,10 +10,24 @@ services:
     envVars:
       - key: MONGO_URI
         value: "" # Set this in Render dashboard (secret)
+      - key: GEMINI_API_KEY
+        value: "" # Set this in Render dashboard (secret)
+      - key: GEMINI_MODEL
+        value: "gemini-3-flash-preview"
       - key: GROQ_API_KEY
         value: "" # Set this in Render dashboard (secret)
       - key: GROQ_MODEL
         value: "llama-3.3-70b-versatile"
+      - key: SMTP_HOST
+        value: "" # e.g. smtp.gmail.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: "" # Set this in Render dashboard (secret)
+      - key: SMTP_PASS
+        value: "" # Set this in Render dashboard (secret)
+      - key: SMTP_FROM
+        value: "" # e.g. Hirebud AI <no-reply@yourdomain.com>
 
   - type: static_site
     name: ai-recruiter-bot-frontend

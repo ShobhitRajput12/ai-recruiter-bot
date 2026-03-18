@@ -1406,10 +1406,15 @@ function App() {
       });
 
       const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || data.message || "Chatbot failed.");
+      }
+
       setAnswer(data.answer || "No answer received.");
     } catch (err) {
       console.error("Chat request failed:", err);
-      setAnswer("Chat request failed. Please try again.");
+      setAnswer(`Chat request failed: ${err.message}`);
     }
   }
 
