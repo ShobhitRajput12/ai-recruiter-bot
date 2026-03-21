@@ -138,7 +138,7 @@ function normalizeWeightValue(value, fallback) {
 function normalizeCategoryWeights(input = {}) {
   const safeInput = input && typeof input === "object" ? input : {};
 
-  return {
+  const normalized = {
     technicalSkills: normalizeWeightValue(
       safeInput.technicalSkills,
       DEFAULT_CATEGORY_WEIGHTS.technicalSkills
@@ -160,6 +160,22 @@ function normalizeCategoryWeights(input = {}) {
       DEFAULT_CATEGORY_WEIGHTS.educationCertification
     )
   };
+
+  const values = Object.values(normalized).filter((value) => Number.isFinite(value));
+  const total = values.reduce((sum, value) => sum + value, 0);
+  const maxValue = values.length ? Math.max(...values) : 0;
+
+  if (total > 0 && total <= 10.5 && maxValue <= 10) {
+    return {
+      technicalSkills: normalized.technicalSkills * 10,
+      softwareSoftSkills: normalized.softwareSoftSkills * 10,
+      experience: normalized.experience * 10,
+      projects: normalized.projects * 10,
+      educationCertification: normalized.educationCertification * 10
+    };
+  }
+
+  return normalized;
 }
 
 function getCategoryWeightTotal(weights) {

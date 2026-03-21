@@ -12,6 +12,11 @@ const {
 const { getDisplayCandidateName } = require("../utils/candidateName");
 const authMiddleware = require("../middleware/auth");
 const mongoose = require("mongoose");
+const {
+  CURRENT_SCORING_VERSION,
+  normalizeApiScore,
+  scaleValidatedScoresForStorage
+} = require("../utils/scoreScale");
 
 const router = express.Router();
 const LIST_PROJECTION = "-resumeFile";
@@ -34,13 +39,31 @@ function withDisplayName(candidate) {
   return {
     ...plainCandidate,
     name: getDisplayCandidateName(plainCandidate),
-    technical_skills_score: plainCandidate.technicalScore ?? null,
-    software_soft_skills_score: plainCandidate.softwareSoftSkillsScore ?? null,
-    experience_score: plainCandidate.experienceMatch ?? null,
-    projects_score: plainCandidate.projectRelevance ?? null,
-    education_certification_score: plainCandidate.educationMatch ?? null,
-    final_score: finalScore,
-    match_percentage: plainCandidate.matchPercentage ?? finalScore
+    technical_skills_score: normalizeApiScore(
+      plainCandidate.technicalScore,
+      plainCandidate.scoringVersion
+    ),
+    software_soft_skills_score: normalizeApiScore(
+      plainCandidate.softwareSoftSkillsScore,
+      plainCandidate.scoringVersion
+    ),
+    experience_score: normalizeApiScore(
+      plainCandidate.experienceMatch,
+      plainCandidate.scoringVersion
+    ),
+    projects_score: normalizeApiScore(
+      plainCandidate.projectRelevance,
+      plainCandidate.scoringVersion
+    ),
+    education_certification_score: normalizeApiScore(
+      plainCandidate.educationMatch,
+      plainCandidate.scoringVersion
+    ),
+    final_score: normalizeApiScore(finalScore, plainCandidate.scoringVersion),
+    match_percentage: normalizeApiScore(
+      plainCandidate.matchPercentage ?? finalScore,
+      plainCandidate.scoringVersion
+    )
   };
 }
 
@@ -202,16 +225,18 @@ router.post("/:id/rescore", async (req, res) => {
 
     const validatedScores = generateCandidateRemarks(aiScores, scoringWeights);
 
-    candidate.technicalScore = validatedScores.technicalScore;
-    candidate.softwareSoftSkillsScore = validatedScores.softwareSoftSkillsScore;
-    candidate.experienceMatch = validatedScores.experienceMatch;
-    candidate.projectRelevance = validatedScores.projectRelevance;
-    candidate.educationMatch = validatedScores.educationMatch;
-    candidate.totalScore = validatedScores.totalScore;
-    candidate.finalScore = validatedScores.finalScore;
-    candidate.matchPercentage = validatedScores.match_percentage;
-    candidate.scoringVersion = 2;
-    candidate.score = validatedScores.totalScore;
+    const storedScores = scaleValidatedScoresForStorage(validatedScores);
+
+    candidate.technicalScore = storedScores.technicalScore;
+    candidate.softwareSoftSkillsScore = storedScores.softwareSoftSkillsScore;
+    candidate.experienceMatch = storedScores.experienceMatch;
+    candidate.projectRelevance = storedScores.projectRelevance;
+    candidate.educationMatch = storedScores.educationMatch;
+    candidate.totalScore = storedScores.totalScore;
+    candidate.finalScore = storedScores.finalScore;
+    candidate.matchPercentage = storedScores.match_percentage;
+    candidate.scoringVersion = CURRENT_SCORING_VERSION;
+    candidate.score = storedScores.score;
     candidate.remarks = validatedScores.remarks;
     candidate.scoringWeights = scoringWeights;
     await candidate.save();

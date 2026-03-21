@@ -4,10 +4,10 @@ import { API_BASE_URL } from "./config";
 import "./App.css";
 
 const SCORE_BANDS = [
-  { min: 80, label: "Strong" },
-  { min: 60, label: "Good" },
-  { min: 40, label: "Mixed" },
-  { min: 20, label: "Weak" },
+  { min: 8, label: "Strong" },
+  { min: 6, label: "Good" },
+  { min: 4, label: "Mixed" },
+  { min: 2, label: "Weak" },
   { min: 0, label: "Very weak" }
 ];
 
@@ -19,16 +19,77 @@ const PDF_FIELD_DEFAULTS = {
 };
 
 const DEFAULT_SCORE_WEIGHTS = {
-  technicalSkills: 30,
-  softwareSoftSkills: 20,
-  experience: 20,
-  projects: 15,
-  educationCertification: 15
+  technicalSkills: 3,
+  softwareSoftSkills: 2,
+  experience: 2,
+  projects: 1.5,
+  educationCertification: 1.5
 };
 
 const AUTH_TOKEN_KEY = "hirebud_ai_token";
 const USER_STORAGE_KEY = "user";
 const LEGACY_TOKEN_KEY = "token";
+
+const INITIAL_QUICK_JOB_DATA = {
+  companyName: "",
+  title: "",
+  level: "",
+  employmentType: "",
+  employmentDetails: "",
+  workArrangement: "",
+  location: "",
+  timezone: "",
+  department: "",
+  reportingTo: "",
+  experienceMin: "",
+  experienceMax: "",
+  skillSet: "",
+  education: "",
+  eligibility: ""
+};
+
+const INITIAL_JOB_GEN_DATA = {
+  companyName: "",
+  incubatedAt: "",
+  department: "",
+  reportingTo: "",
+  title: "",
+  level: "",
+  employmentType: "",
+  employmentDetails: "",
+  workArrangement: "",
+  location: "",
+  timezone: "",
+  responsibilities: "",
+  impact: "",
+  mustHave: "",
+  niceToHave: "",
+  experience: "",
+  education: "",
+  eligibility: "",
+  salaryRange: "",
+  offerHighlights: "",
+  benefits: {
+    health: false,
+    equity: false,
+    remoteStipend: false,
+    learningBudget: false,
+    flexibleHours: false,
+    pto: false,
+    wfhEquipment: false,
+    bonus: false
+  },
+  benefitsOther: "",
+  companyDescription: "",
+  roleExcitement: "",
+  priorities: [
+    "technicalSkills",
+    "softwareSoftSkills",
+    "experience",
+    "projects",
+    "educationCertification"
+  ]
+};
 
 function cleanLine(line) {
   return (line || "").replace(/\s+/g, " ").replace(/[_|]/g, " ").trim();
@@ -205,7 +266,7 @@ function sortCandidatesByFinalScore(candidates, sortOrder = "desc") {
 }
 
 function formatScore(value) {
-  return typeof value === "number" ? `${value} / 100` : "Pending";
+  return typeof value === "number" ? `${value} / 10` : "Pending";
 }
 
 function getBandLabel(value) {
@@ -243,7 +304,7 @@ function buildFallbackRemarks(candidate) {
     ? `${strongest.label} is the best signal right now`
     : "resume data is still incomplete";
   const weakText =
-    weakest && weakest.value <= 45
+    weakest && weakest.value <= 4.5
       ? `${weakest.label} needs closer manual review`
       : "no major blocker stands out from the available scoring";
 
@@ -256,7 +317,7 @@ function getCandidateRemarks(candidate) {
 }
 
 function formatPdfScore(value) {
-  return typeof value === "number" ? `${value} / 100` : "Pending";
+  return typeof value === "number" ? `${value} / 10` : "Pending";
 }
 
 function buildPdfSections(candidate, fieldSelection) {
@@ -312,6 +373,29 @@ function buildPdfSections(candidate, fieldSelection) {
   }
 
   return sections;
+}
+
+function toBulletList(rawValue, fallback = "Not specified") {
+  const lines = (rawValue || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^[-•\d.]+\s+/, "").trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return fallback;
+  }
+
+  return lines.map((line) => `- ${line}`).join("\n");
+}
+
+function buildRoleOverview({ impact, roleExcitement }) {
+  const lines = [impact, roleExcitement].map((line) => cleanLine(line)).filter(Boolean);
+  if (lines.length === 0) {
+    return "Define the primary goal, impact, and why this role matters.";
+  }
+  return lines.join("\n");
 }
 
 function PreviewCard({ item, onRemove }) {
@@ -428,7 +512,7 @@ function CandidateCard({
       </div>
 
       <div className="candidate-progress">
-        <span style={{ width: `${getTotalScore(candidate) ?? 0}%` }} />
+        <span style={{ width: `${(getTotalScore(candidate) ?? 0) * 10}%` }} />
       </div>
 
       <p className="candidate-remarks">{getCandidateRemarks(candidate)}</p>
@@ -498,42 +582,9 @@ function App() {
   const [isJobGenOpen, setIsJobGenOpen] = useState(false);
   const [jobGenErrors, setJobGenErrors] = useState({});
   const [generatedJobDesc, setGeneratedJobDesc] = useState("");
-  const [jobGenData, setJobGenData] = useState({
-    title: "",
-    level: "",
-    employmentType: "",
-    workArrangement: "",
-    location: "",
-    timezone: "",
-    responsibilities: "",
-    impact: "",
-    mustHave: "",
-    niceToHave: "",
-    experience: "",
-    education: "",
-    salaryRange: "",
-    benefits: {
-      health: false,
-      equity: false,
-      remoteStipend: false,
-      learningBudget: false,
-      flexibleHours: false,
-      pto: false,
-      wfhEquipment: false,
-      bonus: false
-    },
-    benefitsOther: "",
-    companyDescription: "",
-    roleExcitement: ""
-    ,
-    priorities: [
-      "technicalSkills",
-      "softwareSoftSkills",
-      "experience",
-      "projects",
-      "educationCertification"
-    ]
-  });
+  const [isPreviewEditable, setIsPreviewEditable] = useState(false);
+  const [quickJobData, setQuickJobData] = useState(INITIAL_QUICK_JOB_DATA);
+  const [jobGenData, setJobGenData] = useState(INITIAL_JOB_GEN_DATA);
 
   function persistAuthToken(nextToken) {
     setAuthToken(nextToken);
@@ -613,7 +664,7 @@ function App() {
     (sum, value) => sum + (Number.isFinite(value) ? value : 0),
     0
   );
-  const weightsAreValid = weightTotal === 100;
+  const weightsAreValid = Math.abs(weightTotal - 10) < 0.01;
   const candidateDirectory = [...new Map(
     [...latestCandidates, ...topCandidates].map((candidate) => [candidate._id, candidate])
   ).values()];
@@ -654,6 +705,13 @@ function App() {
 
   function updateJobGenField(field, value) {
     setJobGenData((current) => ({
+      ...current,
+      [field]: value
+    }));
+  }
+
+  function updateQuickJobField(field, value) {
+    setQuickJobData((current) => ({
       ...current,
       [field]: value
     }));
@@ -760,24 +818,112 @@ function App() {
       })
       .join("\n");
 
+    const companyName = data.companyName.trim();
+    const locationLine =
+      data.workArrangement === "Remote"
+        ? "Remote"
+        : `${data.workArrangement}${data.location.trim() ? ` – ${data.location.trim()}` : ""}`;
+    const employmentLine = `${data.employmentType}${
+      data.employmentDetails.trim() ? ` (${data.employmentDetails.trim()})` : ""
+    }`;
+
     const sections = [
-      `Job Title\n${data.title.trim()}`,
-      `Company Overview\n${data.companyDescription.trim() || "Share your company mission and values."}`,
-      `About the Role\n${data.impact.trim() || "Define the primary goal and impact for this role."}`,
-      `Responsibilities\n${data.responsibilities.trim()}`,
-      `Required Skills\n${data.mustHave.trim()}`,
-      `Preferred Skills\n${data.niceToHave.trim() || "Nice-to-have skills and technologies."}`,
-      `Experience Required\n${data.experience || "No minimum"}` +
-        (data.education.trim() ? `\nEducation / Certifications\n${data.education.trim()}` : ""),
-      `Scoring Priorities\n${priorityLines || "Not specified"}`,
-      `Work Arrangement\n${data.workArrangement}`,
-      `Location\n${data.location.trim() || "Not specified"}`,
-      `Salary & Benefits\n${data.salaryRange.trim() || "Salary range to be discussed."}` +
-        `\nBenefits & Perks\n${benefitsList.length ? benefitsList.join(", ") : "Not specified"}`,
-      `Why Join Us\n${data.roleExcitement.trim() || "Highlight what makes this role exciting."}`
+      [
+        `Job Description: ${data.title.trim()}${data.level ? ` (${data.level})` : ""}`,
+        `Company: ${companyName || "Not specified"}`,
+        data.incubatedAt.trim() ? `Incubated at: ${data.incubatedAt.trim()}` : "",
+        `Location: ${locationLine || "Not specified"}`,
+        data.timezone.trim()
+          ? `Timezone / working hours overlap: ${data.timezone.trim()}`
+          : "",
+        `Employment Type: ${employmentLine}`,
+        data.department.trim() ? `Department: ${data.department.trim()}` : "",
+        data.reportingTo.trim() ? `Reporting to: ${data.reportingTo.trim()}` : ""
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      `About ${companyName || "the company"}\n${
+        data.companyDescription.trim() || "Share your company mission and values."
+      }`,
+      `Role Overview\n${buildRoleOverview(data)}`,
+      `Key Responsibilities\n${toBulletList(data.responsibilities, "Add role responsibilities.")}`,
+      `Must-Have Skills & Qualifications\n${toBulletList(data.mustHave, "List must-have skills.")}`,
+      `Nice-to-Have Skills\n${toBulletList(
+        data.niceToHave,
+        "Nice-to-have skills and technologies."
+      )}`,
+      `Experience Required\n${data.experience || "No minimum"}`,
+      `Education\n${data.education.trim() || "Not specified"}`,
+      `Eligibility\n${data.eligibility.trim() || "Not specified"}`,
+      `Compensation & Benefits\nSalary range: ${
+        data.salaryRange.trim() || "To be discussed."
+      }\nBenefits & Perks: ${benefitsList.length ? benefitsList.join(", ") : "Not specified"}${
+        data.offerHighlights.trim() ? `\nAdditional highlights: ${data.offerHighlights.trim()}` : ""
+      }`,
+      `Scoring Priorities (Internal)\n${priorityLines || "Not specified"}`
     ];
 
     return sections.join("\n\n");
+  }
+
+  function buildQuickJobDescription(data) {
+    const companyName = cleanLine(data.companyName) || "Company";
+    const title = cleanLine(data.title) || "Full Stack Developer";
+    const level = cleanLine(data.level);
+    const employmentType = cleanLine(data.employmentType) || "Full-time";
+    const employmentDetails = cleanLine(data.employmentDetails);
+    const workArrangement = cleanLine(data.workArrangement) || "On-site";
+    const location = cleanLine(data.location);
+    const timezone = cleanLine(data.timezone);
+    const department = cleanLine(data.department);
+    const reportingTo = cleanLine(data.reportingTo);
+    const minExp = cleanLine(data.experienceMin);
+    const maxExp = cleanLine(data.experienceMax);
+    const expRange =
+      minExp || maxExp
+        ? `${minExp || "0"} to ${maxExp || "2"} years`
+        : "up to 2 years";
+    const skills = cleanLine(data.skillSet) || "Java, C, and C++";
+    const education = cleanLine(data.education) || "Bachelor’s degree preferred.";
+    const eligibility = cleanLine(data.eligibility);
+
+    const headerLines = [
+      `Job Title: ${title}${level ? ` (${level})` : ""}`,
+      `Company: ${companyName}`,
+      `Employment Type: ${employmentType}${employmentDetails ? ` (${employmentDetails})` : ""}`,
+      `Work Arrangement: ${workArrangement}${location ? ` – ${location}` : ""}`,
+      timezone ? `Timezone / working hours overlap: ${timezone}` : "",
+      department ? `Department: ${department}` : "",
+      reportingTo ? `Reporting to: ${reportingTo}` : ""
+    ].filter(Boolean);
+
+    return [
+      headerLines.join("\n"),
+      "",
+      `Job Description: We are seeking a motivated ${title} with ${expRange} of experience to join our dynamic team. The ideal candidate will have strong programming skills in ${skills} and be eager to contribute to the development and maintenance of our software applications.`,
+      "",
+      "Responsibilities:",
+      "- Develop and maintain web applications using full stack technologies.",
+      `- Write clean, efficient, and well-documented code in ${skills}.`,
+      "- Collaborate with cross-functional teams to define, design, and ship new features.",
+      "- Troubleshoot, debug, and optimize existing applications.",
+      "- Participate in code reviews and contribute to team knowledge sharing.",
+      "- Stay updated with emerging technologies and industry trends.",
+      "",
+      "Requirements:",
+      `- Maximum of ${maxExp || "2"} years of professional experience in software development.`,
+      `- Proficiency in ${skills} programming languages.`,
+      "- Understanding of front-end and back-end development processes.",
+      "- Strong problem-solving skills and attention to detail.",
+      "- Ability to work effectively both independently and as part of a team.",
+      "- Good communication skills.",
+      "",
+      "Education:",
+      `- ${education}`,
+      ...(eligibility ? ["", "Eligibility:", `- ${eligibility}`] : []),
+      "",
+      "If you are passionate about software development and eager to grow your career in a collaborative environment, we encourage you to apply."
+    ].join("\n");
   }
 
   function handleGenerateJobDescription() {
@@ -789,6 +935,13 @@ function App() {
 
     const jd = buildJobDescription(jobGenData);
     setGeneratedJobDesc(jd);
+    setIsPreviewEditable(false);
+  }
+
+  function handleQuickJobDescription() {
+    const jd = buildQuickJobDescription(quickJobData);
+    setGeneratedJobDesc(jd);
+    setIsPreviewEditable(false);
   }
 
   async function handleCopyJobDescription() {
@@ -810,6 +963,64 @@ function App() {
     }
     setJob(generatedJobDesc);
     setIsJobGenOpen(false);
+  }
+
+  function resetJobGenerator() {
+    setQuickJobData(INITIAL_QUICK_JOB_DATA);
+    setJobGenData(INITIAL_JOB_GEN_DATA);
+    setJobGenErrors({});
+    setGeneratedJobDesc("");
+    setIsPreviewEditable(false);
+  }
+
+  function downloadJobDescriptionPdf() {
+    if (!generatedJobDesc.trim()) {
+      window.alert("Generate a job description first.");
+      return;
+    }
+
+    const doc = new jsPDF({
+      unit: "pt",
+      format: "a4"
+    });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 48;
+    const contentWidth = pageWidth - margin * 2;
+    let cursorY = margin;
+
+    const ensureSpace = (neededHeight) => {
+      if (cursorY + neededHeight <= pageHeight - margin) {
+        return;
+      }
+      doc.addPage();
+      cursorY = margin;
+    };
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("Job Description", margin, cursorY);
+    cursorY += 24;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+
+    const lines = generatedJobDesc.split(/\r?\n/);
+    lines.forEach((line) => {
+      if (!line.trim()) {
+        cursorY += 12;
+        return;
+      }
+
+      const wrapped = doc.splitTextToSize(line, contentWidth);
+      const blockHeight = wrapped.length * 14;
+      ensureSpace(blockHeight + 6);
+      doc.text(wrapped, margin, cursorY);
+      cursorY += blockHeight + 6;
+    });
+
+    doc.save("job-description.pdf");
   }
 
   useEffect(() => {
@@ -1161,7 +1372,7 @@ function App() {
   function updateScoreWeight(key, rawValue) {
     const nextValue = Number(rawValue);
     const clamped = Number.isFinite(nextValue)
-      ? Math.max(0, Math.min(100, nextValue))
+      ? Math.max(0, Math.min(10, nextValue))
       : 0;
 
     setScoreWeights((current) => ({
@@ -1352,7 +1563,7 @@ function App() {
       }
 
       if (!weightsAreValid) {
-        window.alert("Scoring weights must add up to 100.");
+        window.alert("Scoring weights must add up to 10.");
         return;
       }
 
@@ -1996,7 +2207,7 @@ function App() {
               </div>
               <div className="weights-header-actions">
                 <span className={`weight-total ${weightsAreValid ? "ok" : "warn"}`}>
-                  Total: {weightTotal}
+                  Total: {weightTotal.toFixed(2)}
                 </span>
                 <button
                   type="button"
@@ -2015,7 +2226,8 @@ function App() {
                     <input
                       type="number"
                       min="0"
-                      max="100"
+                      max="10"
+                      step="0.1"
                       value={scoreWeights.technicalSkills}
                       onChange={(event) =>
                         updateScoreWeight("technicalSkills", event.target.value)
@@ -2027,7 +2239,8 @@ function App() {
                     <input
                       type="number"
                       min="0"
-                      max="100"
+                      max="10"
+                      step="0.1"
                       value={scoreWeights.softwareSoftSkills}
                       onChange={(event) =>
                         updateScoreWeight("softwareSoftSkills", event.target.value)
@@ -2039,7 +2252,8 @@ function App() {
                     <input
                       type="number"
                       min="0"
-                      max="100"
+                      max="10"
+                      step="0.1"
                       value={scoreWeights.experience}
                       onChange={(event) =>
                         updateScoreWeight("experience", event.target.value)
@@ -2051,7 +2265,8 @@ function App() {
                     <input
                       type="number"
                       min="0"
-                      max="100"
+                      max="10"
+                      step="0.1"
                       value={scoreWeights.projects}
                       onChange={(event) =>
                         updateScoreWeight("projects", event.target.value)
@@ -2063,7 +2278,8 @@ function App() {
                     <input
                       type="number"
                       min="0"
-                      max="100"
+                      max="10"
+                      step="0.1"
                       value={scoreWeights.educationCertification}
                       onChange={(event) =>
                         updateScoreWeight("educationCertification", event.target.value)
@@ -2073,7 +2289,7 @@ function App() {
                 </div>
                 <div className="weights-actions">
                   <p className={`helper-text ${weightsAreValid ? "" : "weight-warning"}`}>
-                    Total must equal 100 before you can upload.
+                    Total must equal 10 before you can upload.
                   </p>
                   <button type="button" onClick={resetScoreWeights} className="secondary-button">
                     Reset defaults
@@ -2380,175 +2596,172 @@ function App() {
             </div>
 
             <div className="jobgen-body">
-              <section className="jobgen-section">
-                <h4>Role Basics</h4>
-                <label className="field">
-                  <span>Job Title *</span>
-                  <input
-                    type="text"
-                    value={jobGenData.title}
-                    onChange={(event) => updateJobGenField("title", event.target.value)}
-                  />
-                  {jobGenErrors.title && (
-                    <p className="helper-text weight-warning">{jobGenErrors.title}</p>
-                  )}
-                </label>
-                <label className="field">
-                  <span>Job Level / Seniority *</span>
-                  <select
-                    className="candidate-search-input"
-                    value={jobGenData.level}
-                    onChange={(event) => updateJobGenField("level", event.target.value)}
-                  >
-                    <option value="">Select level</option>
-                    <option value="Intern">Intern</option>
-                    <option value="Entry-Level / Junior">Entry-Level / Junior</option>
-                    <option value="Mid-Level">Mid-Level</option>
-                    <option value="Senior">Senior</option>
-                    <option value="Lead / Staff">Lead / Staff</option>
-                    <option value="Manager">Manager</option>
-                    <option value="Director / Head">Director / Head</option>
-                    <option value="VP / C-level">VP / C-level</option>
-                    <option value="Other">Other</option>
-                  </select>
-                  {jobGenErrors.level && (
-                    <p className="helper-text weight-warning">{jobGenErrors.level}</p>
-                  )}
-                </label>
-                <label className="field">
-                  <span>Employment Type *</span>
-                  <select
-                    className="candidate-search-input"
-                    value={jobGenData.employmentType}
-                    onChange={(event) => updateJobGenField("employmentType", event.target.value)}
-                  >
-                    <option value="">Select type</option>
-                    <option value="Full-time">Full-time</option>
-                    <option value="Part-time">Part-time</option>
-                    <option value="Contract / Freelance">Contract / Freelance</option>
-                    <option value="Internship">Internship</option>
-                  </select>
-                  {jobGenErrors.employmentType && (
-                    <p className="helper-text weight-warning">
-                      {jobGenErrors.employmentType}
-                    </p>
-                  )}
-                </label>
-              </section>
+              {!generatedJobDesc.trim() && (
+                <section className="jobgen-section">
+                  <h4>Quick JD Creator</h4>
+                  <label className="field">
+                    <span>Company Name</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Ostera AI"
+                      value={quickJobData.companyName}
+                      onChange={(event) => updateQuickJobField("companyName", event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Job Title *</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Full Stack Developer"
+                      value={quickJobData.title}
+                      onChange={(event) => updateQuickJobField("title", event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Job Level / Seniority</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Entry-Level / Junior"
+                      value={quickJobData.level}
+                      onChange={(event) => updateQuickJobField("level", event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Employment Type</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Full-time"
+                      value={quickJobData.employmentType}
+                      onChange={(event) =>
+                        updateQuickJobField("employmentType", event.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Employment details (optional)</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. 6-month internship convertible to full-time"
+                      value={quickJobData.employmentDetails}
+                      onChange={(event) =>
+                        updateQuickJobField("employmentDetails", event.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Work Arrangement</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. On-site / Hybrid / Remote"
+                      value={quickJobData.workArrangement}
+                      onChange={(event) =>
+                        updateQuickJobField("workArrangement", event.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Office Location</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Chennai, Tamil Nadu"
+                      value={quickJobData.location}
+                      onChange={(event) => updateQuickJobField("location", event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Timezone / Working hours overlap</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. IST"
+                      value={quickJobData.timezone}
+                      onChange={(event) => updateQuickJobField("timezone", event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Department</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Research & Development"
+                      value={quickJobData.department}
+                      onChange={(event) => updateQuickJobField("department", event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Reporting to</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Head of AI & ML"
+                      value={quickJobData.reportingTo}
+                      onChange={(event) => updateQuickJobField("reportingTo", event.target.value)}
+                    />
+                  </label>
+                  <div className="jobgen-priority-grid">
+                    <label className="field">
+                      <span>Experience (min)</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={quickJobData.experienceMin}
+                        onChange={(event) =>
+                          updateQuickJobField("experienceMin", event.target.value)
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Experience (max)</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={quickJobData.experienceMax}
+                        onChange={(event) =>
+                          updateQuickJobField("experienceMax", event.target.value)
+                        }
+                      />
+                    </label>
+                  </div>
+                  <label className="field">
+                    <span>Skill Set *</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Java, C, C++"
+                      value={quickJobData.skillSet}
+                      onChange={(event) => updateQuickJobField("skillSet", event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Education / certifications</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Bachelor's degree in CS or related field"
+                      value={quickJobData.education}
+                      onChange={(event) => updateQuickJobField("education", event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Eligibility (citizenship, clearance, onsite, etc.)</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Indian citizen, onsite in Chennai"
+                      value={quickJobData.eligibility}
+                      onChange={(event) => updateQuickJobField("eligibility", event.target.value)}
+                    />
+                  </label>
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={handleQuickJobDescription}
+                    >
+                      Create JD
+                    </button>
+                  </div>
+                </section>
+              )}
 
-              <section className="jobgen-section">
-                <h4>Location & Schedule</h4>
-                <label className="field">
-                  <span>Work Arrangement *</span>
-                  <select
-                    className="candidate-search-input"
-                    value={jobGenData.workArrangement}
-                    onChange={(event) => updateJobGenField("workArrangement", event.target.value)}
-                  >
-                    <option value="">Select arrangement</option>
-                    <option value="Remote">Remote</option>
-                    <option value="Hybrid">Hybrid</option>
-                    <option value="On-site">On-site</option>
-                  </select>
-                  {jobGenErrors.workArrangement && (
-                    <p className="helper-text weight-warning">
-                      {jobGenErrors.workArrangement}
-                    </p>
-                  )}
-                </label>
-                <label className="field">
-                  <span>Office Location *</span>
-                  <input
-                    type="text"
-                    placeholder="e.g. Chennai, Tamil Nadu"
-                    value={jobGenData.location}
-                    onChange={(event) => updateJobGenField("location", event.target.value)}
-                  />
-                  {jobGenErrors.location && (
-                    <p className="helper-text weight-warning">{jobGenErrors.location}</p>
-                  )}
-                </label>
-                <label className="field">
-                  <span>Timezone / Working hours overlap</span>
-                  <input
-                    type="text"
-                    value={jobGenData.timezone}
-                    onChange={(event) => updateJobGenField("timezone", event.target.value)}
-                  />
-                </label>
-              </section>
-
-              <section className="jobgen-section">
-                <h4>Responsibilities</h4>
-                <label className="field">
-                  <span>Main responsibilities *</span>
-                  <textarea
-                    rows="5"
-                    placeholder="Use bullet points"
-                    value={jobGenData.responsibilities}
-                    onChange={(event) => updateJobGenField("responsibilities", event.target.value)}
-                  />
-                  {jobGenErrors.responsibilities && (
-                    <p className="helper-text weight-warning">
-                      {jobGenErrors.responsibilities}
-                    </p>
-                  )}
-                </label>
-                <label className="field">
-                  <span>Primary goal or biggest impact expected</span>
-                  <textarea
-                    rows="3"
-                    value={jobGenData.impact}
-                    onChange={(event) => updateJobGenField("impact", event.target.value)}
-                  />
-                </label>
-              </section>
-
-              <section className="jobgen-section">
-                <h4>Requirements</h4>
-                <label className="field">
-                  <span>Must-have skills / technologies *</span>
-                  <textarea
-                    rows="4"
-                    value={jobGenData.mustHave}
-                    onChange={(event) => updateJobGenField("mustHave", event.target.value)}
-                  />
-                  {jobGenErrors.mustHave && (
-                    <p className="helper-text weight-warning">{jobGenErrors.mustHave}</p>
-                  )}
-                </label>
-                <label className="field">
-                  <span>Nice-to-have skills</span>
-                  <textarea
-                    rows="3"
-                    value={jobGenData.niceToHave}
-                    onChange={(event) => updateJobGenField("niceToHave", event.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span>Minimum years of experience</span>
-                  <select
-                    className="candidate-search-input"
-                    value={jobGenData.experience}
-                    onChange={(event) => updateJobGenField("experience", event.target.value)}
-                  >
-                    <option value="">Select</option>
-                    <option value="No minimum">No minimum</option>
-                    <option value="1–2 years">1–2 years</option>
-                    <option value="3–5 years">3–5 years</option>
-                    <option value="5–8 years">5–8 years</option>
-                    <option value="8+ years">8+ years</option>
-                  </select>
-                </label>
-                <label className="field">
-                  <span>Education / certifications</span>
-                  <textarea
-                    rows="3"
-                    value={jobGenData.education}
-                    onChange={(event) => updateJobGenField("education", event.target.value)}
-                  />
-                </label>
-              </section>
+              {!generatedJobDesc.trim() && (
+                <>
+                </>
+              )}
 
               <section className="jobgen-section">
                 <h4>Scoring Priorities</h4>
@@ -2581,125 +2794,32 @@ function App() {
               </section>
 
               <section className="jobgen-section">
-                <h4>Compensation & Benefits</h4>
-                <label className="field">
-                  <span>Salary range</span>
-                  <input
-                    type="text"
-                    value={jobGenData.salaryRange}
-                    onChange={(event) => updateJobGenField("salaryRange", event.target.value)}
-                  />
-                </label>
-                <div className="jobgen-checkboxes">
-                  <label className="candidate-select-row">
-                    <input
-                      type="checkbox"
-                      checked={jobGenData.benefits.health}
-                      onChange={(event) => updateBenefit("health", event.target.checked)}
-                    />
-                    <span>Health insurance</span>
-                  </label>
-                  <label className="candidate-select-row">
-                    <input
-                      type="checkbox"
-                      checked={jobGenData.benefits.equity}
-                      onChange={(event) => updateBenefit("equity", event.target.checked)}
-                    />
-                    <span>Stock options / ESOP</span>
-                  </label>
-                  <label className="candidate-select-row">
-                    <input
-                      type="checkbox"
-                      checked={jobGenData.benefits.remoteStipend}
-                      onChange={(event) => updateBenefit("remoteStipend", event.target.checked)}
-                    />
-                    <span>Remote work stipend</span>
-                  </label>
-                  <label className="candidate-select-row">
-                    <input
-                      type="checkbox"
-                      checked={jobGenData.benefits.learningBudget}
-                      onChange={(event) => updateBenefit("learningBudget", event.target.checked)}
-                    />
-                    <span>Learning budget</span>
-                  </label>
-                  <label className="candidate-select-row">
-                    <input
-                      type="checkbox"
-                      checked={jobGenData.benefits.flexibleHours}
-                      onChange={(event) => updateBenefit("flexibleHours", event.target.checked)}
-                    />
-                    <span>Flexible hours</span>
-                  </label>
-                  <label className="candidate-select-row">
-                    <input
-                      type="checkbox"
-                      checked={jobGenData.benefits.pto}
-                      onChange={(event) => updateBenefit("pto", event.target.checked)}
-                    />
-                    <span>Paid time off</span>
-                  </label>
-                  <label className="candidate-select-row">
-                    <input
-                      type="checkbox"
-                      checked={jobGenData.benefits.wfhEquipment}
-                      onChange={(event) => updateBenefit("wfhEquipment", event.target.checked)}
-                    />
-                    <span>Work-from-home equipment</span>
-                  </label>
-                  <label className="candidate-select-row">
-                    <input
-                      type="checkbox"
-                      checked={jobGenData.benefits.bonus}
-                      onChange={(event) => updateBenefit("bonus", event.target.checked)}
-                    />
-                    <span>Performance bonus</span>
-                  </label>
-                </div>
-                <label className="field">
-                  <span>Other (optional)</span>
-                  <input
-                    type="text"
-                    value={jobGenData.benefitsOther}
-                    onChange={(event) => updateJobGenField("benefitsOther", event.target.value)}
-                  />
-                </label>
-              </section>
-
-              <section className="jobgen-section">
-                <h4>Company & Culture</h4>
-                <label className="field">
-                  <span>Company description / mission</span>
-                  <textarea
-                    rows="4"
-                    value={jobGenData.companyDescription}
-                    onChange={(event) =>
-                      updateJobGenField("companyDescription", event.target.value)
-                    }
-                  />
-                </label>
-                <label className="field">
-                  <span>What makes this role exciting</span>
-                  <textarea
-                    rows="3"
-                    value={jobGenData.roleExcitement}
-                    onChange={(event) =>
-                      updateJobGenField("roleExcitement", event.target.value)
-                    }
-                  />
-                </label>
-              </section>
-
-              <section className="jobgen-section">
                 <h4>Preview</h4>
                 <textarea
                   className="jobgen-preview"
                   rows="10"
                   value={generatedJobDesc}
                   onChange={(event) => setGeneratedJobDesc(event.target.value)}
+                  readOnly={!isPreviewEditable}
                   placeholder="Generated job description will appear here."
                 />
                 <div className="action-row">
+                  {generatedJobDesc.trim() && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => setIsPreviewEditable(true)}
+                    >
+                      Edit Inputs
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={resetJobGenerator}
+                  >
+                    Reset
+                  </button>
                   <button
                     type="button"
                     className="secondary-button"
@@ -2713,6 +2833,13 @@ function App() {
                     onClick={handleUseJobDescription}
                   >
                     Confirm
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={downloadJobDescriptionPdf}
+                  >
+                    Download JD PDF
                   </button>
                 </div>
               </section>

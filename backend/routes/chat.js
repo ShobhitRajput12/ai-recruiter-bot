@@ -2,6 +2,7 @@ const express = require("express");
 const axios = require("axios");
 const Candidate = require("../models/Candidate");
 const authMiddleware = require("../middleware/auth");
+const { normalizeApiScore } = require("../utils/scoreScale");
 
 const router = express.Router();
 
@@ -38,12 +39,12 @@ router.post("/", async (req, res) => {
       .map((c) => ({
         name: c.name,
         groupName: c.groupName || "",
-        technicalScore: c.technicalScore ?? null,
-        softwareSoftSkillsScore: c.softwareSoftSkillsScore ?? null,
-        experienceMatch: c.experienceMatch ?? null,
-        projectRelevance: c.projectRelevance ?? null,
-        educationMatch: c.educationMatch ?? null,
-        totalScore: c.finalScore ?? c.totalScore ?? c.score ?? null,
+        technicalScore: normalizeApiScore(c.technicalScore ?? null, c.scoringVersion),
+        softwareSoftSkillsScore: normalizeApiScore(c.softwareSoftSkillsScore ?? null, c.scoringVersion),
+        experienceMatch: normalizeApiScore(c.experienceMatch ?? null, c.scoringVersion),
+        projectRelevance: normalizeApiScore(c.projectRelevance ?? null, c.scoringVersion),
+        educationMatch: normalizeApiScore(c.educationMatch ?? null, c.scoringVersion),
+        totalScore: normalizeApiScore(c.finalScore ?? c.totalScore ?? c.score ?? null, c.scoringVersion),
         remarks: c.remarks || "",
         resumeText: c.resumeText
           ? `${c.resumeText.slice(0, MAX_RESUME_CHARS)}${

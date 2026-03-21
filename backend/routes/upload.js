@@ -10,6 +10,11 @@ const {
 const Candidate = require("../models/Candidate");
 const { extractCandidateNameFromResume } = require("../utils/candidateName");
 const authMiddleware = require("../middleware/auth");
+const {
+  CURRENT_SCORING_VERSION,
+  normalizeApiScore,
+  scaleValidatedScoresForStorage
+} = require("../utils/scoreScale");
 
 const router = express.Router();
 
@@ -21,13 +26,31 @@ function toApiCandidate(candidate) {
 
   return {
     ...plainCandidate,
-    technical_skills_score: plainCandidate.technicalScore ?? null,
-    software_soft_skills_score: plainCandidate.softwareSoftSkillsScore ?? null,
-    experience_score: plainCandidate.experienceMatch ?? null,
-    projects_score: plainCandidate.projectRelevance ?? null,
-    education_certification_score: plainCandidate.educationMatch ?? null,
-    final_score: finalScore,
-    match_percentage: plainCandidate.matchPercentage ?? finalScore
+    technical_skills_score: normalizeApiScore(
+      plainCandidate.technicalScore,
+      plainCandidate.scoringVersion
+    ),
+    software_soft_skills_score: normalizeApiScore(
+      plainCandidate.softwareSoftSkillsScore,
+      plainCandidate.scoringVersion
+    ),
+    experience_score: normalizeApiScore(
+      plainCandidate.experienceMatch,
+      plainCandidate.scoringVersion
+    ),
+    projects_score: normalizeApiScore(
+      plainCandidate.projectRelevance,
+      plainCandidate.scoringVersion
+    ),
+    education_certification_score: normalizeApiScore(
+      plainCandidate.educationMatch,
+      plainCandidate.scoringVersion
+    ),
+    final_score: normalizeApiScore(finalScore, plainCandidate.scoringVersion),
+    match_percentage: normalizeApiScore(
+      plainCandidate.matchPercentage ?? finalScore,
+      plainCandidate.scoringVersion
+    )
   };
 }
 
@@ -84,7 +107,7 @@ router.post("/", upload.array("resumes"), async (req, res) => {
 
     if (getCategoryWeightTotal(scoringWeights) !== 100) {
       return res.status(400).json({
-        message: "Scoring weights must add up to 100"
+        message: "Scoring weights must add up to 10"
       });
     }
 
@@ -196,6 +219,7 @@ router.post("/", upload.array("resumes"), async (req, res) => {
       }
 
         const validatedScores = generateCandidateRemarks(aiResult, scoringWeights);
+        const storedScores = scaleValidatedScoresForStorage(validatedScores);
 
         const existing = await Candidate.findOne({
           userId: req.user.id,
@@ -213,16 +237,16 @@ router.post("/", upload.array("resumes"), async (req, res) => {
           existing.name = displayName;
           existing.groupName = groupName;
           existing.originalFileName = file.originalname;
-          existing.score = validatedScores.totalScore;
-          existing.technicalScore = validatedScores.technicalScore;
-          existing.softwareSoftSkillsScore = validatedScores.softwareSoftSkillsScore;
-          existing.experienceMatch = validatedScores.experienceMatch;
-          existing.projectRelevance = validatedScores.projectRelevance;
-          existing.educationMatch = validatedScores.educationMatch;
-          existing.totalScore = validatedScores.totalScore;
-          existing.finalScore = validatedScores.finalScore;
-          existing.matchPercentage = validatedScores.match_percentage;
-          existing.scoringVersion = 2;
+          existing.score = storedScores.score;
+          existing.technicalScore = storedScores.technicalScore;
+          existing.softwareSoftSkillsScore = storedScores.softwareSoftSkillsScore;
+          existing.experienceMatch = storedScores.experienceMatch;
+          existing.projectRelevance = storedScores.projectRelevance;
+          existing.educationMatch = storedScores.educationMatch;
+          existing.totalScore = storedScores.totalScore;
+          existing.finalScore = storedScores.finalScore;
+          existing.matchPercentage = storedScores.match_percentage;
+          existing.scoringVersion = CURRENT_SCORING_VERSION;
           existing.remarks = validatedScores.remarks;
           existing.scoringWeights = scoringWeights;
           existing.resumeText = text;
@@ -236,16 +260,16 @@ router.post("/", upload.array("resumes"), async (req, res) => {
             name: displayName,
             originalFileName: file.originalname,
             groupName,
-            score: validatedScores.totalScore,
-            technicalScore: validatedScores.technicalScore,
-            softwareSoftSkillsScore: validatedScores.softwareSoftSkillsScore,
-            experienceMatch: validatedScores.experienceMatch,
-            projectRelevance: validatedScores.projectRelevance,
-            educationMatch: validatedScores.educationMatch,
-            totalScore: validatedScores.totalScore,
-            finalScore: validatedScores.finalScore,
-            matchPercentage: validatedScores.match_percentage,
-            scoringVersion: 2,
+            score: storedScores.score,
+            technicalScore: storedScores.technicalScore,
+            softwareSoftSkillsScore: storedScores.softwareSoftSkillsScore,
+            experienceMatch: storedScores.experienceMatch,
+            projectRelevance: storedScores.projectRelevance,
+            educationMatch: storedScores.educationMatch,
+            totalScore: storedScores.totalScore,
+            finalScore: storedScores.finalScore,
+            matchPercentage: storedScores.match_percentage,
+            scoringVersion: CURRENT_SCORING_VERSION,
             remarks: validatedScores.remarks,
             scoringWeights,
             job,

@@ -22,12 +22,27 @@ function getTransporter() {
 }
 
 async function sendOtpEmail({ to, otp }) {
+  const allowDevFallback =
+    process.env.NODE_ENV !== "production" &&
+    process.env.DEV_OTP_FALLBACK === "true";
+
   const from =
     process.env.SMTP_FROM ||
     (process.env.SMTP_USER ? `Hirebud AI <${process.env.SMTP_USER}>` : undefined);
 
   if (!from) {
     throw new Error("SMTP_FROM is not set");
+  }
+
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if ((!host || !user || !pass) && allowDevFallback) {
+    console.warn("SMTP configuration missing. Using DEV_OTP_FALLBACK.");
+    console.log(`DEV OTP for ${to}: ${otp}`);
+    return;
   }
 
   const transporter = getTransporter();
@@ -43,12 +58,21 @@ async function sendOtpEmail({ to, otp }) {
     </div>
   `;
 
-  await transporter.sendMail({
-    from,
-    to,
-    subject: "Your Hirebud AI verification code",
-    html
-  });
+  try {
+    await transporter.sendMail({
+      from,
+      to,
+      subject: "Your Hirebud AI verification code",
+      html
+    });
+  } catch (err) {
+    if (allowDevFallback) {
+      console.warn("SMTP send failed. Using DEV_OTP_FALLBACK.", err.message);
+      console.log(`DEV OTP for ${to}: ${otp}`);
+      return;
+    }
+    throw err;
+  }
 }
 
 module.exports = {
