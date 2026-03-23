@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { jsPDF } from "jspdf";
 import { API_BASE_URL } from "./config";
 import { getWeights as getExperienceWeights } from "./utils/experienceWeights";
@@ -405,12 +406,16 @@ function isJobHeadingLine(line) {
     return false;
   }
 
+  if (trimmed === "Job Description (Intro)") {
+    return true;
+  }
+
   if (trimmed.endsWith(":")) {
     return true;
   }
 
   const exactHeadings = new Set([
-    "Job Description (Intro)",
+    "Job Description",
     "Key Responsibilities",
     "Requirements (Core Skills)",
       "Preferred Skills (Nice-to-Have)",
@@ -440,17 +445,19 @@ function isJobHeadingLine(line) {
 }
 
 function renderPreviewLine(line) {
-  const trimmed = String(line || "");
-  if (!trimmed.includes(":")) {
-    return isJobHeadingLine(trimmed) ? <strong>{trimmed}</strong> : trimmed;
+  const rawLine = String(line || "");
+  const normalizedLine =
+    rawLine.trim() === "Job Description (Intro)" ? "Job Description" : rawLine;
+  if (!normalizedLine.includes(":")) {
+    return isJobHeadingLine(normalizedLine) ? <strong>{normalizedLine}</strong> : normalizedLine;
   }
 
-  const splitIndex = trimmed.indexOf(":");
-  const label = trimmed.slice(0, splitIndex + 1);
-  const value = trimmed.slice(splitIndex + 1);
+  const splitIndex = normalizedLine.indexOf(":");
+  const label = normalizedLine.slice(0, splitIndex + 1);
+  const value = normalizedLine.slice(splitIndex + 1);
 
   if (!value.trim()) {
-    return <strong>{trimmed}</strong>;
+    return <strong>{normalizedLine}</strong>;
   }
 
   return (
@@ -964,7 +971,7 @@ function App() {
     return [
       headerLines.join("\n"),
       "",
-      "Job Description (Intro)",
+      "Job Description",
       `We are a fast-growing, technology-driven organization focused on building scalable, high-performance, and innovative digital solutions. We are looking for a highly motivated and passionate ${title} (${expRange} experience) to join our dynamic team.`,
       "",
       "As part of our engineering team, you will work on cutting-edge applications, contribute to end-to-end product development, and collaborate with cross-functional teams to deliver impactful solutions. This role is ideal for individuals who are eager to learn, take ownership, and grow in a fast-paced environment.",
@@ -1198,26 +1205,32 @@ function App() {
     const companyName = extractCompanyName(lines);
     addHeader(companyName);
     lines.forEach((line) => {
-      if (!line.trim()) {
+      const normalizedLine =
+        line.trim() === "Job Description (Intro)" ? "Job Description" : line;
+
+      if (!normalizedLine.trim()) {
         cursorY += paragraphGap;
         return;
       }
 
-      const colonIndex = line.indexOf(":");
-      const hasLabelValue = colonIndex !== -1 && line.slice(colonIndex + 1).trim() !== "";
+      const colonIndex = normalizedLine.indexOf(":");
+      const hasLabelValue =
+        colonIndex !== -1 && normalizedLine.slice(colonIndex + 1).trim() !== "";
       if (hasLabelValue) {
-        const label = line.slice(0, colonIndex + 1);
-        const value = line.slice(colonIndex + 1).trimStart();
+        const label = normalizedLine.slice(0, colonIndex + 1);
+        const value = normalizedLine.slice(colonIndex + 1).trimStart();
         renderLabelValueLine(label, value);
         return;
       }
 
-      const isHeading = isJobHeadingLine(line);
-      const isBullet = /^\s*[-•]\s+/.test(line);
-      const bulletText = isBullet ? line.replace(/^\s*[-•]\s+/, "") : line;
+      const isHeading = isJobHeadingLine(normalizedLine);
+      const isBullet = /^\s*[-•]\s+/.test(normalizedLine);
+      const bulletText = isBullet
+        ? normalizedLine.replace(/^\s*[-•]\s+/, "")
+        : normalizedLine;
 
       if (isHeading) {
-        const headingLines = wrapTextToWidth(line, contentWidth);
+        const headingLines = wrapTextToWidth(normalizedLine, contentWidth);
         const headingHeight = headingLines.length * Math.round(headingFontSize * 1.3);
         ensureSpace(sectionSpacing + headingHeight + headingGap);
         cursorY += sectionSpacing;
@@ -2121,23 +2134,53 @@ function App() {
     authMode === "signup" && authPassword && authConfirm && authPassword !== authConfirm;
   const signupPasswordTooShort =
     authMode === "signup" && authPassword && authPassword.length < 8;
+  const loginTextVariants = {
+    hidden: {},
+    show: {
+      transition: {
+        staggerChildren: 0.14
+      }
+    }
+  };
+  const loginTextItemVariants = {
+    hidden: { opacity: 0, x: -24 },
+    show: { opacity: 1, x: 0, transition: { duration: 0.6, ease: "easeOut" } }
+  };
 
   if (!authToken) {
     return (
-      <div className="app-shell">
-        <section className="hero-panel">
-          <div>
-            <p className="eyebrow">Hirebud AI</p>
-            <h1>
+      <div className="app-shell auth-shell futuristic-shell relative overflow-hidden">
+        <div className="auth-background" aria-hidden="true">
+          <div className="auth-gradient" />
+          <span className="auth-orb orb-1" />
+          <span className="auth-orb orb-2" />
+          <span className="auth-orb orb-3" />
+          <span className="auth-orb orb-4" />
+        </div>
+        <section className="hero-panel auth-content">
+          <motion.div variants={loginTextVariants} initial="hidden" animate="show">
+            <motion.p className="eyebrow" variants={loginTextItemVariants}>
+              Hirebud AI
+            </motion.p>
+            <motion.h1 variants={loginTextItemVariants}>
               {authMode === "login"
                 ? "Sign in to your hiring workspace."
                 : "Create your Hirebud AI account."}
-            </h1>
-            <p className="hero-copy">
+            </motion.h1>
+            <motion.p className="hero-copy" variants={loginTextItemVariants}>
               Access your pipelines, resumes, and candidate insights securely.
-            </p>
-          </div>
-          <div className="panel">
+            </motion.p>
+          </motion.div>
+          <motion.div
+            className="panel glass-card"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: [0, -10, 0] }}
+            transition={{
+              opacity: { duration: 0.7, ease: "easeOut" },
+              y: { duration: 6, repeat: Infinity, ease: "easeInOut" }
+            }}
+            whileHover={{ y: -12 }}
+          >
             <div className="panel-heading">
               <div>
                 <p className="panel-kicker">
@@ -2166,6 +2209,7 @@ function App() {
                   placeholder="xyz@gmail.com"
                   required
                   disabled={authMode === "signup" && signupStep === "otp"}
+                  className="transition-all duration-200 ease-out focus:scale-[1.01] focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300"
                 />
               </label>
               {authMode === "signup" && signupStep === "otp" && (
@@ -2177,6 +2221,7 @@ function App() {
                     onChange={(event) => setSignupOtp(event.target.value)}
                     placeholder="6-digit code"
                     required
+                    className="transition-all duration-200 ease-out focus:scale-[1.01] focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300"
                   />
                 </label>
               )}
@@ -2189,6 +2234,7 @@ function App() {
                     onChange={(event) => setAuthPassword(event.target.value)}
                     placeholder="At least 8 characters"
                     required
+                    className="transition-all duration-200 ease-out focus:scale-[1.01] focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300"
                   />
                 </label>
               ) : (
@@ -2207,13 +2253,15 @@ function App() {
               )}
               {authMode === "login" && (
                 <div className="forgot-row">
-                  <button
+                  <motion.button
                     type="button"
-                    className="text-button"
+                    className="text-button transition-colors duration-200"
                     onClick={openResetModal}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                   >
                     Forgot Password?
-                  </button>
+                  </motion.button>
                 </div>
               )}
               {authMode === "signup" && signupStep === "form" && (
@@ -2225,6 +2273,7 @@ function App() {
                     onChange={(event) => setAuthConfirm(event.target.value)}
                     placeholder="Re-enter password"
                     required
+                    className="transition-all duration-200 ease-out focus:scale-[1.01] focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300"
                   />
                 </label>
               )}
@@ -2243,15 +2292,17 @@ function App() {
                 <p className="helper-text weight-warning">{authError}</p>
               )}
               <div className="action-row">
-                <button
+                <motion.button
                   type="submit"
-                  className="primary-button"
+                  className="primary-button shadow-[0_0_24px_rgba(31,106,95,0.28)] hover:shadow-[0_0_32px_rgba(31,106,95,0.4)]"
                   disabled={
                     authLoading ||
                     (authMode === "signup" &&
                       signupStep === "form" &&
                       (signupPasswordMismatch || signupPasswordTooShort))
                   }
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                 >
                   {authLoading
                     ? "Please wait..."
@@ -2260,10 +2311,10 @@ function App() {
                       : authMode === "login"
                         ? "Sign in"
                         : "Create account"}
-                </button>
-                <button
+                </motion.button>
+                <motion.button
                   type="button"
-                  className="secondary-button"
+                  className="secondary-button transition-transform duration-200"
                   onClick={() => {
                     setAuthMode(authMode === "login" ? "signup" : "login");
                     setAuthError("");
@@ -2271,24 +2322,28 @@ function App() {
                     setSignupOtp("");
                     setSignupMessage("");
                   }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                 >
                   {authMode === "login" ? "Need an account?" : "Already have an account?"}
-                </button>
+                </motion.button>
               </div>
               {authMode === "signup" && signupStep === "otp" && (
                 <div className="forgot-row">
-                  <button
+                  <motion.button
                     type="button"
-                    className="text-button"
+                    className="text-button transition-colors duration-200"
                     onClick={handleSignupResendOtp}
                     disabled={authLoading}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                   >
                     Resend OTP
-                  </button>
+                  </motion.button>
                 </div>
               )}
             </form>
-          </div>
+          </motion.div>
         </section>
         {isResetOpen && (
           <div className="modal-backdrop" onClick={closeResetModal}>
@@ -2393,7 +2448,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell futuristic-shell">
       <header className="top-nav m-1">
         <div className="app-title left">Hirebud AI</div>
         <div className="app-title spacer" aria-hidden="true" />
@@ -2899,11 +2954,36 @@ function App() {
       {isJobGenOpen && (
         <div className="modal-backdrop" onClick={() => setIsJobGenOpen(false)}>
           <div className="jobgen-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="jobgen-header">
+            <div className={`jobgen-header${generatedJobDesc.trim() ? " has-actions" : ""}`}>
               <div>
                 <p className="panel-kicker">Job description generator</p>
                 <h3>Generate a structured job description</h3>
               </div>
+              {generatedJobDesc.trim() && (
+                <div className="action-row top-actions jobgen-header-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setIsPreviewEditable(true)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={resetJobGenerator}
+                  >
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={handleCopyJobDescription}
+                  >
+                    Copy
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="jobgen-body ">
@@ -3075,7 +3155,7 @@ function App() {
               )}
 
               {generatedJobDesc.trim() && (
-                <section className="jobgen-section" ref={previewSectionRef}>
+                <section className="jobgen-section jobgen-preview-section" ref={previewSectionRef}>
                   <h4>Preview</h4>
                   {isPreviewEditable ? (
                     <textarea
@@ -3099,36 +3179,6 @@ function App() {
                       })}
                     </div>
                   )}
-                  <div className="action-row ">
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => setIsPreviewEditable(true)}
-                    >
-                      Edit Inputs
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={resetJobGenerator}
-                    >
-                      Reset
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={handleCopyJobDescription}
-                    >
-                      Copy
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={downloadJobDescriptionPdf}
-                    >
-                      Download JD PDF
-                    </button>
-                  </div>
                 </section>
               )}
             </div>
@@ -3142,13 +3192,24 @@ function App() {
                 Cancel
               </button>
               {generatedJobDesc.trim() && (
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={handleUseJobDescription}
-                >
-                  Confirm
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={handleUseJobDescription}
+                  >
+                    Confirm
+                  </button>
+                  <div className="bottom-actions">
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={downloadJobDescriptionPdf}
+                    >
+                      Download PDF
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </div>
