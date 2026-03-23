@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useRef, useState } from "react";
 import { jsPDF } from "jspdf";
 import { API_BASE_URL } from "./config";
+import { getWeights as getExperienceWeights } from "./utils/experienceWeights";
 import "./App.css";
 
 const SCORE_BANDS = [
@@ -396,6 +397,68 @@ function buildRoleOverview({ impact, roleExcitement }) {
     return "Define the primary goal, impact, and why this role matters.";
   }
   return lines.join("\n");
+}
+
+function isJobHeadingLine(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  if (trimmed.endsWith(":")) {
+    return true;
+  }
+
+  const exactHeadings = new Set([
+    "Job Description (Intro)",
+    "Key Responsibilities",
+    "Requirements (Core Skills)",
+      "Preferred Skills (Nice-to-Have)",
+      "Education",
+      "Eligibility",
+      "What We Offer (Benefits & Growth)",
+      "Joining Preference",
+    "Role Overview",
+    "Key Responsibilities",
+    "Must-Have Skills & Qualifications",
+    "Nice-to-Have Skills",
+    "Experience Required",
+    "Education",
+    "Eligibility",
+    "Compensation & Benefits"
+  ]);
+
+  if (exactHeadings.has(trimmed)) {
+    return true;
+  }
+
+  return trimmed.startsWith("Job Title:") ||
+    trimmed.startsWith("Company:") ||
+    trimmed.startsWith("Employment Type:") ||
+    trimmed.startsWith("Work Arrangement:") ||
+    trimmed.startsWith("Timezone / working hours overlap:");
+}
+
+function renderPreviewLine(line) {
+  const trimmed = String(line || "");
+  if (!trimmed.includes(":")) {
+    return isJobHeadingLine(trimmed) ? <strong>{trimmed}</strong> : trimmed;
+  }
+
+  const splitIndex = trimmed.indexOf(":");
+  const label = trimmed.slice(0, splitIndex + 1);
+  const value = trimmed.slice(splitIndex + 1);
+
+  if (!value.trim()) {
+    return <strong>{trimmed}</strong>;
+  }
+
+  return (
+    <>
+      <strong>{label}</strong>
+      {value}
+    </>
+  );
 }
 
 function PreviewCard({ item, onRemove }) {
@@ -900,29 +963,48 @@ function App() {
     return [
       headerLines.join("\n"),
       "",
-      `Job Description: We are seeking a motivated ${title} with ${expRange} of experience to join our dynamic team. The ideal candidate will have strong programming skills in ${skills} and be eager to contribute to the development and maintenance of our software applications.`,
+      "Job Description (Intro)",
+      `We are a fast-growing, technology-driven organization focused on building scalable, high-performance, and innovative digital solutions. We are looking for a highly motivated and passionate ${title} (${expRange} experience) to join our dynamic team.`,
       "",
-      "Responsibilities:",
-      "- Develop and maintain web applications using full stack technologies.",
-      `- Write clean, efficient, and well-documented code in ${skills}.`,
-      "- Collaborate with cross-functional teams to define, design, and ship new features.",
-      "- Troubleshoot, debug, and optimize existing applications.",
-      "- Participate in code reviews and contribute to team knowledge sharing.",
-      "- Stay updated with emerging technologies and industry trends.",
+      "As part of our engineering team, you will work on cutting-edge applications, contribute to end-to-end product development, and collaborate with cross-functional teams to deliver impactful solutions. This role is ideal for individuals who are eager to learn, take ownership, and grow in a fast-paced environment.",
       "",
-      "Requirements:",
-      `- Maximum of ${maxExp || "2"} years of professional experience in software development.`,
-      `- Proficiency in ${skills} programming languages.`,
-      "- Understanding of front-end and back-end development processes.",
-      "- Strong problem-solving skills and attention to detail.",
-      "- Ability to work effectively both independently and as part of a team.",
-      "- Good communication skills.",
+      "Key Responsibilities",
+      "- Design, develop, and maintain scalable web applications using modern full stack technologies.",
+      "- Write clean, modular, and maintainable code following best practices and coding standards.",
+      "- Collaborate with product managers, designers, and other developers to deliver high-quality features.",
+      "- Troubleshoot, debug, and optimize application performance for speed and scalability.",
+      "- Participate in code reviews, ensuring code quality and knowledge sharing within the team.",
+      "- Continuously research and adopt new technologies to improve development efficiency and product quality.",
       "",
-      "Education:",
+      "Requirements (Core Skills)",
+      `- ${expRange} of hands-on experience in software or web development.`,
+      `- Strong proficiency in programming languages such as ${skills}.`,
+      "- Experience with modern frameworks/libraries like React.js, Node.js, Express.js.",
+      "- Working knowledge of databases such as MongoDB, MySQL, or PostgreSQL.",
+      "- Understanding of RESTful APIs and client-server architecture.",
+      "- Strong analytical thinking and problem-solving skills.",
+      "- Good communication skills and ability to work collaboratively in a team environment.",
+      "",
+      "Preferred Skills (Nice-to-Have)",
+      "- Experience with cloud platforms such as AWS, Microsoft Azure, or Google Cloud Platform (GCP).",
+      "- Familiarity with Git, GitHub/GitLab, and version control workflows.",
+      "- Knowledge of Docker, CI/CD pipelines, or DevOps practices.",
+      "- Understanding of system design principles and scalable architecture.",
+      "",
+      "Education",
       `- ${education}`,
-      ...(eligibility ? ["", "Eligibility:", `- ${eligibility}`] : []),
+      ...(eligibility ? ["", "Eligibility", `- ${eligibility}`] : []),
       "",
-      "If you are passionate about software development and eager to grow your career in a collaborative environment, we encourage you to apply."
+      "What We Offer (Benefits & Growth)",
+      "- Competitive salary with performance-based incentives and rewards.",
+      "- Flexible work environment (Remote / Hybrid options available).",
+      "- Opportunity to work on real-world, scalable, and impactful projects.",
+      "- Access to continuous learning programs, certifications, and upskilling resources.",
+      "- Fast-track career growth with mentorship from experienced professionals.",
+      "- Collaborative and innovation-driven work culture.",
+      "",
+      "Joining Preference",
+      "Candidates who can join immediately or within 7–15 days will be given preference."
     ].join("\n");
   }
 
@@ -962,6 +1044,7 @@ function App() {
       return;
     }
     setJob(generatedJobDesc);
+    applyExperienceWeightsFromJD();
     setIsJobGenOpen(false);
   }
 
@@ -988,6 +1071,7 @@ function App() {
     const pageHeight = doc.internal.pageSize.getHeight();
     const margin = 48;
     const contentWidth = pageWidth - margin * 2;
+    const lineHeight = 14;
     let cursorY = margin;
 
     const ensureSpace = (neededHeight) => {
@@ -996,6 +1080,72 @@ function App() {
       }
       doc.addPage();
       cursorY = margin;
+    };
+
+    const wrapTextToWidth = (text, maxWidth) => {
+      const words = String(text || "").split(/\s+/).filter(Boolean);
+      const lines = [];
+      let currentLine = "";
+
+      words.forEach((word) => {
+        const nextLine = currentLine ? `${currentLine} ${word}` : word;
+        if (doc.getTextWidth(nextLine) <= maxWidth || !currentLine) {
+          currentLine = nextLine;
+        } else {
+          lines.push(currentLine);
+          currentLine = word;
+        }
+      });
+
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+
+      return lines;
+    };
+
+    const renderLabelValueLine = (labelText, valueText) => {
+      const label = labelText.endsWith(":") ? labelText : `${labelText}:`;
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      const labelWidth = doc.getTextWidth(`${label} `);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+
+      const words = String(valueText || "").split(/\s+/).filter(Boolean);
+      let firstLine = "";
+      let index = 0;
+      const availableFirstWidth = Math.max(0, contentWidth - labelWidth);
+
+      for (; index < words.length; index += 1) {
+        const candidate = firstLine ? `${firstLine} ${words[index]}` : words[index];
+        if (doc.getTextWidth(candidate) <= availableFirstWidth || !firstLine) {
+          firstLine = candidate;
+        } else {
+          break;
+        }
+      }
+
+      const remainingText = words.slice(index).join(" ");
+      const remainingLines = remainingText ? wrapTextToWidth(remainingText, contentWidth) : [];
+      const blockHeight = lineHeight * (1 + remainingLines.length);
+      ensureSpace(blockHeight + 6);
+
+      doc.setFont("helvetica", "bold");
+      doc.text(label, margin, cursorY);
+      doc.setFont("helvetica", "normal");
+      if (firstLine) {
+        doc.text(firstLine, margin + labelWidth, cursorY);
+      }
+
+      cursorY += lineHeight;
+      remainingLines.forEach((line) => {
+        doc.text(line, margin, cursorY);
+        cursorY += lineHeight;
+      });
+      cursorY += 6;
     };
 
     doc.setFont("helvetica", "bold");
@@ -1013,9 +1163,28 @@ function App() {
         return;
       }
 
+      const colonIndex = line.indexOf(":");
+      const hasLabelValue = colonIndex !== -1 && line.slice(colonIndex + 1).trim() !== "";
+      if (hasLabelValue) {
+        const label = line.slice(0, colonIndex + 1);
+        const value = line.slice(colonIndex + 1).trimStart();
+        renderLabelValueLine(label, value);
+        return;
+      }
+
+      const isHeading = isJobHeadingLine(line);
       const wrapped = doc.splitTextToSize(line, contentWidth);
-      const blockHeight = wrapped.length * 14;
+      const blockHeight = wrapped.length * lineHeight;
       ensureSpace(blockHeight + 6);
+
+      if (isHeading) {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(12);
+      } else {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+      }
+
       doc.text(wrapped, margin, cursorY);
       cursorY += blockHeight + 6;
     });
@@ -1036,6 +1205,80 @@ function App() {
       });
     };
   }, []);
+
+  function normalizeExperienceRange(minRaw, maxRaw) {
+    const minParsed = Number(minRaw);
+    const maxParsed = Number(maxRaw);
+    const minValue = Number.isFinite(minParsed) ? minParsed : null;
+    const maxValue = Number.isFinite(maxParsed) ? maxParsed : null;
+
+    if (minValue === null && maxValue === null) {
+      return null;
+    }
+
+    let min = minValue ?? 0;
+    let max = maxValue ?? min;
+
+    if (min > max) {
+      [min, max] = [max, min];
+    }
+
+    return { min, max };
+  }
+
+  function parseExperienceRangeFromText(text) {
+    const source = String(text || "");
+    if (!source.trim()) {
+      return null;
+    }
+
+    const rangeMatch = source.match(
+      /(\d+(?:\.\d+)?)\s*(?:-|\u2013|to)\s*(\d+(?:\.\d+)?)/i
+    );
+    if (rangeMatch) {
+      return normalizeExperienceRange(rangeMatch[1], rangeMatch[2]);
+    }
+
+    const maxMatch = source.match(
+      /(?:up to|maximum|max\.?)\s*(\d+(?:\.\d+)?)\s*years?/i
+    );
+    if (maxMatch) {
+      return normalizeExperienceRange(0, maxMatch[1]);
+    }
+
+    const minMatch = source.match(
+      /(?:minimum|min\.?|at least)\s*(\d+(?:\.\d+)?)\+?/i
+    );
+    if (minMatch) {
+      return normalizeExperienceRange(minMatch[1], null);
+    }
+
+    const singleMatch = source.match(/(\d+(?:\.\d+)?)\+?\s*years?/i);
+    if (singleMatch) {
+      return normalizeExperienceRange(singleMatch[1], null);
+    }
+
+    return null;
+  }
+
+  function applyExperienceWeightsFromJD() {
+    const rangeFromQuick = normalizeExperienceRange(
+      quickJobData.experienceMin,
+      quickJobData.experienceMax
+    );
+
+    const rangeFromForm = parseExperienceRangeFromText(jobGenData.experience);
+    const rangeFromJd = parseExperienceRangeFromText(generatedJobDesc);
+
+    const finalRange = rangeFromQuick || rangeFromForm || rangeFromJd;
+    if (!finalRange) {
+      return;
+    }
+
+    const nextWeights = getExperienceWeights(finalRange.min, finalRange.max);
+    setScoreWeights(nextWeights);
+    setIsWeightsOpen(true);
+  }
 
   function openResetModal() {
     setIsResetOpen(true);
@@ -2764,45 +3007,31 @@ function App() {
               )}
 
               <section className="jobgen-section">
-                <h4>Scoring Priorities</h4>
-                <div className="jobgen-priority-grid">
-                  {[
-                    "technicalSkills",
-                    "softwareSoftSkills",
-                    "experience",
-                    "projects",
-                    "educationCertification"
-                  ].map((key, index) => (
-                    <label className="field" key={`priority-${index}`}>
-                      <span>Priority {index + 1}</span>
-                      <select
-                        className="candidate-search-input"
-                        value={jobGenData.priorities?.[index] || key}
-                        onChange={(event) => updatePriority(index, event.target.value)}
-                      >
-                        <option value="technicalSkills">Technical Skills</option>
-                        <option value="softwareSoftSkills">Soft Skills</option>
-                        <option value="experience">Experience</option>
-                        <option value="projects">Projects</option>
-                        <option value="educationCertification">
-                          Education / Certifications
-                        </option>
-                      </select>
-                    </label>
-                  ))}
-                </div>
-              </section>
-
-              <section className="jobgen-section">
                 <h4>Preview</h4>
-                <textarea
-                  className="jobgen-preview"
-                  rows="10"
-                  value={generatedJobDesc}
-                  onChange={(event) => setGeneratedJobDesc(event.target.value)}
-                  readOnly={!isPreviewEditable}
-                  placeholder="Generated job description will appear here."
-                />
+                {isPreviewEditable ? (
+                  <textarea
+                    className="jobgen-preview"
+                    rows="10"
+                    value={generatedJobDesc}
+                    onChange={(event) => setGeneratedJobDesc(event.target.value)}
+                    placeholder="Generated job description will appear here."
+                  />
+                ) : (
+                  <div className="jobgen-preview">
+                    {generatedJobDesc
+                      ? generatedJobDesc.split(/\r?\n/).map((line, index) => {
+                          if (!line.trim()) {
+                            return <div key={`space-${index}`} style={{ height: 10 }} />;
+                          }
+                          return (
+                            <p key={`line-${index}`}>
+                              {renderPreviewLine(line)}
+                            </p>
+                          );
+                        })
+                      : "Generated job description will appear here."}
+                  </div>
+                )}
                 <div className="action-row">
                   {generatedJobDesc.trim() && (
                     <button

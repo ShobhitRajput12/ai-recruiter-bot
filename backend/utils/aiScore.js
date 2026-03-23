@@ -8,98 +8,6 @@ const DEFAULT_CATEGORY_WEIGHTS = {
   educationCertification: 15
 };
 
-const TECHNICAL_SKILL_KEYWORDS = [
-  "javascript", "typescript", "python", "java", "c++", "c#", "react",
-  "angular", "vue", "node", "node.js", "express", "django", "spring boot",
-  "mongodb", "mysql", "postgresql", "sql", "docker", "kubernetes", "aws",
-  "azure", "google cloud", "gcp", "git", "github", "html", "css",
-  "tailwind", "api", "rest api", "restful api", "microservices",
-  "machine learning", "data structures", "algorithms", "linux", "devops",
-  "flask", "streamlit", "socket.io", "jwt", "opencv", "cnn", "oop",
-  "object oriented programming", "database", "web development",
-  "software development", "programming", "coding"
-];
-
-const TECHNICAL_SKILL_GROUPS = [
-  { name: "javascript", aliases: ["javascript"] },
-  { name: "typescript", aliases: ["typescript"] },
-  { name: "python", aliases: ["python"] },
-  { name: "java", aliases: ["java"] },
-  { name: "c++", aliases: ["c++"] },
-  { name: "c#", aliases: ["c#"] },
-  { name: "react", aliases: ["react", "react.js"] },
-  { name: "angular", aliases: ["angular"] },
-  { name: "vue", aliases: ["vue", "vue.js"] },
-  { name: "node", aliases: ["node", "node.js"] },
-  { name: "express", aliases: ["express"] },
-  { name: "django", aliases: ["django"] },
-  { name: "spring boot", aliases: ["spring boot"] },
-  { name: "flask", aliases: ["flask"] },
-  { name: "mongodb", aliases: ["mongodb"] },
-  { name: "mysql", aliases: ["mysql"] },
-  { name: "postgresql", aliases: ["postgresql", "postgres"] },
-  { name: "sql", aliases: ["sql"] },
-  { name: "docker", aliases: ["docker"] },
-  { name: "kubernetes", aliases: ["kubernetes", "k8s"] },
-  { name: "aws", aliases: ["aws", "amazon web services"] },
-  { name: "azure", aliases: ["azure"] },
-  { name: "google cloud", aliases: ["google cloud", "gcp"] },
-  { name: "git", aliases: ["git", "github"] },
-  { name: "html", aliases: ["html"] },
-  { name: "css", aliases: ["css"] },
-  { name: "tailwind", aliases: ["tailwind", "tailwind css"] },
-  { name: "api", aliases: ["api", "rest api", "restful api"] },
-  { name: "microservices", aliases: ["microservices", "microservice"] },
-  { name: "machine learning", aliases: ["machine learning", "ml"] },
-  { name: "data structures", aliases: ["data structures"] },
-  { name: "algorithms", aliases: ["algorithms"] },
-  { name: "linux", aliases: ["linux"] },
-  { name: "devops", aliases: ["devops"] },
-  { name: "streamlit", aliases: ["streamlit"] },
-  { name: "socket.io", aliases: ["socket.io", "socketio"] },
-  { name: "jwt", aliases: ["jwt", "json web token"] },
-  { name: "opencv", aliases: ["opencv"] },
-  { name: "cnn", aliases: ["cnn", "convolutional neural network"] },
-  { name: "oop", aliases: ["oop", "object oriented programming"] },
-  { name: "database", aliases: ["database", "databases"] },
-  { name: "web development", aliases: ["web development"] },
-  { name: "software development", aliases: ["software development"] },
-  { name: "programming", aliases: ["programming", "coding"] }
-];
-
-const SOFTWARE_AND_SOFT_SKILL_GROUPS = [
-  { name: "jira", aliases: ["jira"] },
-  { name: "confluence", aliases: ["confluence"] },
-  { name: "slack", aliases: ["slack"] },
-  { name: "trello", aliases: ["trello"] },
-  { name: "asana", aliases: ["asana"] },
-  { name: "figma", aliases: ["figma"] },
-  { name: "postman", aliases: ["postman"] },
-  { name: "excel", aliases: ["excel", "microsoft excel"] },
-  { name: "power bi", aliases: ["power bi", "powerbi"] },
-  { name: "tableau", aliases: ["tableau"] },
-  { name: "agile", aliases: ["agile"] },
-  { name: "scrum", aliases: ["scrum"] },
-  { name: "communication", aliases: ["communication", "communicator"] },
-  { name: "leadership", aliases: ["leadership", "led team", "team lead"] },
-  { name: "collaboration", aliases: ["collaboration", "collaborative", "cross-functional"] },
-  { name: "problem solving", aliases: ["problem solving", "problem-solving"] },
-  { name: "analytical", aliases: ["analytical", "analysis"] },
-  { name: "time management", aliases: ["time management"] },
-  { name: "stakeholder management", aliases: ["stakeholder management", "stakeholder"] },
-  { name: "presentation", aliases: ["presentation", "presented"] }
-];
-
-const CERTIFICATION_KEYWORDS = [
-  "certification", "certified", "certificate", "aws certified",
-  "azure certification", "google certification", "scrum master", "pmp"
-];
-
-const EDUCATION_KEYWORDS = [
-  "computer science", "software engineering", "information technology",
-  "computer applications", "mca", "bca", "b.tech", "btech", "m.tech",
-  "engineering", "it", "bachelor", "master"
-];
 
 function clampScore(value, fallback = 0) {
   const parsed = Number.parseInt(value, 10);
@@ -202,388 +110,6 @@ function safeScore(value, fallback = 0) {
   return clampScore(Math.round(parsed), 0);
 }
 
-function normalizeText(text) {
-  return String(text || "").toLowerCase();
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function textIncludesSkill(text, skill) {
-  const normalizedText = normalizeText(text);
-  const normalizedSkill = String(skill || "").trim().toLowerCase();
-
-  if (!normalizedSkill) {
-    return false;
-  }
-
-  if (normalizedText.includes(normalizedSkill)) {
-    return true;
-  }
-
-  const compactSkill = normalizedSkill.replace(/[\s./+-]+/g, "");
-  const compactText = normalizedText.replace(/[\s./+-]+/g, "");
-
-  if (compactSkill && compactText.includes(compactSkill)) {
-    return true;
-  }
-
-  const skillWords = normalizedSkill.split(/\s+/).filter(Boolean);
-  if (skillWords.length > 1) {
-    const flexiblePattern = skillWords.map(escapeRegExp).join("[\\s./+-]*");
-    return new RegExp(flexiblePattern, "i").test(text);
-  }
-
-  return false;
-}
-
-function isSoftwareRole(job) {
-  const normalizedJob = normalizeText(job);
-
-  return [
-    "software engineer", "software engineering", "software developer", "developer",
-    "frontend", "backend", "full stack", "full-stack", "web developer",
-    "application developer", "programmer", "coding", "technical intern", "engineering intern"
-  ].some((keyword) => normalizedJob.includes(keyword));
-}
-
-function countExplicitEngineeringSignals(resume) {
-  return TECHNICAL_SKILL_KEYWORDS.filter((skill) => textIncludesSkill(resume, skill)).length;
-}
-
-function getRelevantGroupMatches(groups, sourceText) {
-  return groups
-    .filter((group) => group.aliases.some((alias) => textIncludesSkill(sourceText, alias)))
-    .map((group) => group.name);
-}
-
-function getMatchedGroups(groups, job, resume) {
-  return groups
-    .filter(
-      (group) =>
-        group.aliases.some((alias) => textIncludesSkill(job, alias)) &&
-        group.aliases.some((alias) => textIncludesSkill(resume, alias))
-    )
-    .map((group) => group.name);
-}
-
-function getRelevantTechnicalSkills(job) {
-  return getRelevantGroupMatches(TECHNICAL_SKILL_GROUPS, job);
-}
-
-function getMatchedTechnicalSkills(job, resume) {
-  return getMatchedGroups(TECHNICAL_SKILL_GROUPS, job, resume);
-}
-
-function getRelevantSoftwareSoftSkills(job) {
-  return getRelevantGroupMatches(SOFTWARE_AND_SOFT_SKILL_GROUPS, job);
-}
-
-function getMatchedSoftwareSoftSkills(job, resume) {
-  return getMatchedGroups(SOFTWARE_AND_SOFT_SKILL_GROUPS, job, resume);
-}
-
-function parseExperienceRequirement(job) {
-  const normalizedJob = normalizeText(job);
-
-  const rangeMatch = normalizedJob.match(/(\d+)\s*(?:-|–|to)\s*(\d+)\s+years?/i);
-  if (rangeMatch) {
-    return {
-      minYears: Number.parseInt(rangeMatch[1], 10),
-      maxYears: Number.parseInt(rangeMatch[2], 10)
-    };
-  }
-
-  const minimumMatch = normalizedJob.match(/(?:minimum|min\.?|at least)\s*(\d+)\+?\s+years?/i);
-  if (minimumMatch) {
-    return { minYears: Number.parseInt(minimumMatch[1], 10), maxYears: null };
-  }
-
-  const singleMatch = normalizedJob.match(/(\d+)\+?\s+years?\s+(?:of\s+)?(?:professional\s+)?experience/i);
-  if (singleMatch) {
-    return { minYears: Number.parseInt(singleMatch[1], 10), maxYears: null };
-  }
-
-  return null;
-}
-
-function getSectionText(resume, sectionStarts, sectionEnds) {
-  const normalizedResume = normalizeText(resume);
-  for (const startKeyword of sectionStarts) {
-    const startIndex = normalizedResume.indexOf(startKeyword);
-    if (startIndex === -1) {
-      continue;
-    }
-
-    let endIndex = normalizedResume.length;
-    for (const endKeyword of sectionEnds) {
-      const candidateEndIndex = normalizedResume.indexOf(
-        endKeyword,
-        startIndex + startKeyword.length
-      );
-      if (candidateEndIndex !== -1 && candidateEndIndex < endIndex) {
-        endIndex = candidateEndIndex;
-      }
-    }
-
-    return normalizedResume.slice(startIndex, endIndex);
-  }
-
-  return "";
-}
-
-function estimateYearsFromText(text) {
-  const yearRangePattern = /\b(20\d{2})\s*(?:-|–)\s*(20\d{2}|present|current)\b/gi;
-  let totalMonths = 0;
-  let match;
-
-  while ((match = yearRangePattern.exec(text)) !== null) {
-    const startYear = Number.parseInt(match[1], 10);
-    const endYear = /present|current/i.test(match[2]) ? 2026 : Number.parseInt(match[2], 10);
-
-    if (!Number.isNaN(startYear) && !Number.isNaN(endYear) && endYear >= startYear) {
-      totalMonths += (endYear - startYear) * 12;
-    }
-  }
-
-  return totalMonths / 12;
-}
-
-function estimateResumeExperienceYears(resume) {
-  const normalizedResume = normalizeText(resume);
-  const explicitYears = [
-    ...normalizedResume.matchAll(
-      /(\d+(?:\.\d+)?)\+?\s+years?\s+of\s+(?:professional\s+)?experience/gi
-    )
-  ]
-    .map((item) => Number.parseFloat(item[1]))
-    .filter((value) => !Number.isNaN(value));
-
-  const experienceText = getSectionText(
-    resume,
-    ["professional experience", "work experience", "employment", "experience", "internship", "internships"],
-    ["education", "projects", "skills", "certifications", "achievements", "interests", "summary", "professional summary"]
-  );
-  const derivedYears = experienceText ? estimateYearsFromText(experienceText) : 0;
-  const bestExplicitYears = explicitYears.length > 0 ? Math.max(...explicitYears) : 0;
-
-  return Math.max(derivedYears, bestExplicitYears);
-}
-
-function computeCoverageScore(relevantItems, matchedItems, options = {}) {
-  const {
-    noRequirementScore = 40,
-    noRequirementResumeBoost = 0,
-    baseWeight = 80,
-    perMatchBonus = 4,
-    minimumFloor = 0
-  } = options;
-
-  if (relevantItems.length === 0) {
-    return clampScore(noRequirementScore + Math.min(noRequirementResumeBoost, 20), noRequirementScore);
-  }
-
-  const coverage = matchedItems.length / relevantItems.length;
-  const score = Math.round(coverage * baseWeight + matchedItems.length * perMatchBonus);
-  return clampScore(score, minimumFloor);
-}
-
-function deriveTechnicalScore(job, resume) {
-  const relevantSkills = getRelevantTechnicalSkills(job);
-  const matchedSkills = getMatchedTechnicalSkills(job, resume);
-  const relevantCount = relevantSkills.length;
-  const matchedCount = matchedSkills.length;
-
-  if (relevantCount === 0) {
-    return isSoftwareRole(job)
-      ? Math.min(35, countExplicitEngineeringSignals(resume) * 4)
-      : 25;
-  }
-
-  const coverage = matchedCount / relevantCount;
-  const engineeringSignalCount = countExplicitEngineeringSignals(resume);
-  let score = Math.round(coverage * 78 + matchedCount * 4 + Math.min(engineeringSignalCount, 8) * 2);
-
-  if (coverage < 0.15) {
-    score = Math.min(score, 22);
-  } else if (coverage < 0.3) {
-    score = Math.min(score, 38);
-  } else if (coverage < 0.5) {
-    score = Math.min(score, 58);
-  } else if (coverage < 0.7) {
-    score = Math.min(score, 78);
-  } else if (coverage < 0.9) {
-    score = Math.min(score, 90);
-  } else if (matchedCount < 4) {
-    score = Math.min(score, 93);
-  }
-
-  const hasStrongBreadth =
-    relevantSkills.length >= 6 &&
-    matchedSkills.length >= Math.max(relevantSkills.length - 1, 5);
-
-  if (!hasStrongBreadth) {
-    score = Math.min(score, 92);
-  }
-
-  if (isSoftwareRole(job)) {
-    const engineeringSignals = countExplicitEngineeringSignals(resume);
-    if (engineeringSignals === 0) {
-      score = Math.min(score, 15);
-    } else if (engineeringSignals <= 2) {
-      score = Math.min(score, 35);
-    } else if (engineeringSignals <= 4) {
-      score = Math.min(score, 55);
-    }
-  }
-
-  return clampScore(score, matchedCount > 0 ? matchedCount * 5 : 0);
-}
-
-function deriveSoftwareSoftSkillsScore(job, resume) {
-  const relevantSkills = getRelevantSoftwareSoftSkills(job);
-  const matchedSkills = getMatchedSoftwareSoftSkills(job, resume);
-  const resumeSignals = getRelevantGroupMatches(SOFTWARE_AND_SOFT_SKILL_GROUPS, resume);
-
-  if (relevantSkills.length === 0) {
-    return clampScore(35 + resumeSignals.length * 6, 35);
-  }
-
-  let score = computeCoverageScore(relevantSkills, matchedSkills, {
-    baseWeight: 82,
-    perMatchBonus: 5,
-    minimumFloor: matchedSkills.length > 0 ? 18 : 0
-  });
-
-  if (matchedSkills.length === 0) {
-    score = Math.min(score, 20);
-  }
-
-  return clampScore(score, matchedSkills.length > 0 ? matchedSkills.length * 8 : 0);
-}
-
-function deriveExperienceMatch(job, resume) {
-  const requirement = parseExperienceRequirement(job);
-  const resumeYears = estimateResumeExperienceYears(resume);
-  const experienceText = getSectionText(
-    resume,
-    ["professional experience", "work experience", "employment", "experience", "internship", "internships"],
-    ["education", "projects", "skills", "certifications", "achievements", "interests", "summary", "professional summary"]
-  );
-
-  if (!requirement || !requirement.minYears) {
-    return experienceText ? Math.min(80, 40 + Math.round(resumeYears * 10)) : 35;
-  }
-
-  const experienceGap = requirement.minYears - resumeYears;
-
-  if (experienceGap <= 0) {
-    return 90;
-  }
-  if (experienceGap <= 0.5) {
-    return 75;
-  }
-  if (experienceGap <= 1) {
-    return 60;
-  }
-  if (experienceGap <= 2) {
-    return 42;
-  }
-  if (experienceGap <= 3) {
-    return 25;
-  }
-
-  return experienceText ? 15 : 5;
-}
-
-function deriveProjectRelevance(job, resume) {
-  const projectText = getSectionText(
-    resume,
-    ["projects", "project", "personal projects", "academic projects"],
-    ["experience", "education", "skills", "certifications", "achievements", "interests"]
-  );
-
-  if (!projectText) {
-    return 10;
-  }
-
-  const relevantSkills = getRelevantTechnicalSkills(job);
-  const matchedProjectSkills = relevantSkills.filter((skill) => textIncludesSkill(projectText, skill));
-
-  if (relevantSkills.length === 0) {
-    return 45;
-  }
-
-  const coverage = matchedProjectSkills.length / relevantSkills.length;
-  let score = Math.round(coverage * 85 + matchedProjectSkills.length * 3);
-
-  if (coverage < 0.2) {
-    score = Math.min(score, 28);
-  } else if (coverage < 0.4) {
-    score = Math.min(score, 45);
-  } else if (coverage < 0.6) {
-    score = Math.min(score, 65);
-  } else if (coverage < 0.8) {
-    score = Math.min(score, 82);
-  }
-
-  return clampScore(score, 12);
-}
-
-function deriveEducationCertificationScore(job, resume) {
-  const normalizedJob = normalizeText(job);
-  const educationText = getSectionText(
-    resume,
-    ["education", "education and training", "academic background"],
-    ["projects", "experience", "skills", "certifications", "achievements", "interests"]
-  );
-  const certificationText = getSectionText(
-    resume,
-    ["certifications", "certification", "licenses"],
-    ["projects", "experience", "skills", "education", "achievements", "interests"]
-  );
-  const combinedEducationText = `${educationText} ${certificationText}`.trim() || normalizeText(resume);
-
-  const relevantEducationKeywords = EDUCATION_KEYWORDS.filter((keyword) => normalizedJob.includes(keyword));
-  const matchedEducationKeywords = relevantEducationKeywords.filter((keyword) =>
-    combinedEducationText.includes(keyword)
-  );
-  const relevantCertificationKeywords = CERTIFICATION_KEYWORDS.filter((keyword) =>
-    normalizedJob.includes(keyword)
-  );
-  const matchedCertificationKeywords = relevantCertificationKeywords.filter((keyword) =>
-    combinedEducationText.includes(keyword)
-  );
-
-  if (
-    /bachelor.?s degree|bachelor degree|bachelor/.test(normalizedJob) &&
-    /bachelor|b\.sc|bsc|b\.tech|btech|bca/.test(combinedEducationText)
-  ) {
-    matchedEducationKeywords.push("bachelor");
-  }
-
-  const relevantTotal = [...new Set([
-    ...relevantEducationKeywords,
-    ...relevantCertificationKeywords
-  ])];
-  const matchedTotal = [...new Set([
-    ...matchedEducationKeywords,
-    ...matchedCertificationKeywords
-  ])];
-
-  if (relevantTotal.length === 0) {
-    const hasRelevantEducation = /computer|it|software|mca|bca|btech|engineering/.test(combinedEducationText);
-    const hasCertifications = CERTIFICATION_KEYWORDS.some((keyword) =>
-      combinedEducationText.includes(keyword)
-    );
-    return hasRelevantEducation || hasCertifications ? 75 : 45;
-  }
-
-  const coverage = matchedTotal.length / relevantTotal.length;
-  return clampScore(Math.round(coverage * 90 + matchedCertificationKeywords.length * 5), 25);
-}
-
 function calculateWeightedScore(individualScore, categoryWeight) {
   return clampNumericScore((safeScore(individualScore) * categoryWeight) / 100, 0);
 }
@@ -649,34 +175,6 @@ function withLegacyAndJsonAliases(baseScores) {
   };
 }
 
-function deriveLocalScores(job, resume, categoryWeights) {
-  const technicalSkillsScore = deriveTechnicalScore(job, resume);
-  const softwareSoftSkillsScore = deriveSoftwareSoftSkillsScore(job, resume);
-  const experienceScore = deriveExperienceMatch(job, resume);
-  const projectsScore = deriveProjectRelevance(job, resume);
-  const educationCertificationScore = deriveEducationCertificationScore(job, resume);
-  const weightedScores = calculateFinalScore({
-    technicalSkillsScore,
-    softwareSoftSkillsScore,
-    experienceScore,
-    projectsScore,
-    educationCertificationScore
-  }, categoryWeights);
-
-  return withLegacyAndJsonAliases({
-    technicalSkillsScore,
-    softwareSoftSkillsScore,
-    experienceScore,
-    projectsScore,
-    educationCertificationScore,
-    weightedTechnicalSkills: weightedScores.weightedTechnicalSkills,
-    weightedSoftwareSoftSkills: weightedScores.weightedSoftwareSoftSkills,
-    weightedExperience: weightedScores.weightedExperience,
-    weightedProjects: weightedScores.weightedProjects,
-    weightedEducationCertification: weightedScores.weightedEducationCertification,
-    finalScore: weightedScores.finalScore
-  });
-}
 
 function validateScoreShape(rawScores, localScores, categoryWeights) {
   const technicalSkillsScore = safeScore(
@@ -822,13 +320,9 @@ function generateCandidateRemarks(scores, categoryWeights) {
   };
 }
 
-function mergeWithLocalScores(parsed, localScores, categoryWeights) {
-  return validateScoreShape(parsed, localScores, categoryWeights);
-}
 
 async function scoreResume(resume, job, categoryWeights) {
   const normalizedWeights = normalizeCategoryWeights(categoryWeights);
-  const localScores = deriveLocalScores(job, resume, normalizedWeights);
 
   try {
     const prompt = `
@@ -881,10 +375,65 @@ Rules:
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
 
-    return mergeWithLocalScores(parsed, localScores, normalizedWeights);
+    const technicalSkillsScore = safeScore(
+      parsed?.technical_skills_score ?? parsed?.technicalSkillsScore ?? parsed?.technicalScore,
+      0
+    );
+    const softwareSoftSkillsScore = safeScore(
+      parsed?.software_soft_skills_score ?? parsed?.softwareSoftSkillsScore,
+      0
+    );
+    const experienceScore = safeScore(
+      parsed?.experience_score ?? parsed?.experienceScore ?? parsed?.experienceMatch,
+      0
+    );
+    const projectsScore = safeScore(
+      parsed?.projects_score ?? parsed?.projectsScore ?? parsed?.projectRelevance,
+      0
+    );
+    const educationCertificationScore = safeScore(
+      parsed?.education_certification_score ??
+        parsed?.educationCertificationScore ??
+        parsed?.educationMatch,
+      0
+    );
+
+    const weightedScores = calculateFinalScore({
+      technicalSkillsScore,
+      softwareSoftSkillsScore,
+      experienceScore,
+      projectsScore,
+      educationCertificationScore
+    }, normalizedWeights);
+
+    return withLegacyAndJsonAliases({
+      technicalSkillsScore,
+      softwareSoftSkillsScore,
+      experienceScore,
+      projectsScore,
+      educationCertificationScore,
+      weightedTechnicalSkills: weightedScores.weightedTechnicalSkills,
+      weightedSoftwareSoftSkills: weightedScores.weightedSoftwareSoftSkills,
+      weightedExperience: weightedScores.weightedExperience,
+      weightedProjects: weightedScores.weightedProjects,
+      weightedEducationCertification: weightedScores.weightedEducationCertification,
+      finalScore: weightedScores.finalScore
+    });
   } catch (error) {
     console.log("Groq Error:", error.response?.data || error.message);
-    return localScores;
+    return withLegacyAndJsonAliases({
+      technicalSkillsScore: 0,
+      softwareSoftSkillsScore: 0,
+      experienceScore: 0,
+      projectsScore: 0,
+      educationCertificationScore: 0,
+      weightedTechnicalSkills: 0,
+      weightedSoftwareSoftSkills: 0,
+      weightedExperience: 0,
+      weightedProjects: 0,
+      weightedEducationCertification: 0,
+      finalScore: 0
+    });
   }
 }
 
