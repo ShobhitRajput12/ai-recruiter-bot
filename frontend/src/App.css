@@ -795,13 +795,17 @@ body {
   border: 1px solid rgba(138, 116, 88, 0.22);
   border-radius: 16px;
   background: rgba(255, 252, 247, 0.98);
-  padding: 14px 16px;
+  padding: 14px 16px 22px;
   color: #1f2937;
   font: inherit;
 }
 
 .jobgen-footer {
-  margin-top: 12px;
+  margin-top: 24px;
+}
+
+.jobgen-preview-actions {
+  margin-top: 28px;
 }
 
 .pdf-modal h3 {
@@ -859,4 +863,7 @@ body {
   .candidate-score-grid {
     grid-template-columns: 1fr;
   }
+}
+.action-row {
+  margin-top: 20px; /* 👈 increase space from top */
 }

@@ -631,7 +631,7 @@ function App() {
   const [topCandidates, setTopCandidates] = useState([]);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState([]);
   const [scoreWeights, setScoreWeights] = useState(DEFAULT_SCORE_WEIGHTS);
-  const [isWeightsOpen, setIsWeightsOpen] = useState(true);
+  const [isWeightsOpen, setIsWeightsOpen] = useState(false);
   const [isPdfOptionsOpen, setIsPdfOptionsOpen] = useState(false);
   const [pdfFieldSelection, setPdfFieldSelection] = useState(PDF_FIELD_DEFAULTS);
   const [question, setQuestion] = useState("");
@@ -642,6 +642,7 @@ function App() {
   const [uploadSummary, setUploadSummary] = useState(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const latestFilesRef = useRef(files);
+  const previewSectionRef = useRef(null);
   const [isJobGenOpen, setIsJobGenOpen] = useState(false);
   const [jobGenErrors, setJobGenErrors] = useState({});
   const [generatedJobDesc, setGeneratedJobDesc] = useState("");
@@ -1069,9 +1070,18 @@ function App() {
 
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
-    const margin = 48;
+    const margin = 50;
     const contentWidth = pageWidth - margin * 2;
-    const lineHeight = 14;
+    const bodyFontSize = 11;
+    const headingFontSize = 16;
+    const subheadingFontSize = 13;
+    const lineHeight = Math.round(bodyFontSize * 1.45);
+    const sectionSpacing = 12;
+    const headingGap = 5;
+    const paragraphGap = 5;  
+    const bulletSpacing = 4;
+    const labelGap = 4;
+    const bulletIndent = 8;
     let cursorY = margin;
 
     const ensureSpace = (neededHeight) => {
@@ -1080,6 +1090,39 @@ function App() {
       }
       doc.addPage();
       cursorY = margin;
+    };
+
+    const extractCompanyName = (lines) => {
+      const companyLine = lines.find((line) => line.trim().startsWith("Company:"));
+      if (!companyLine) return "";
+      return companyLine.replace(/^Company:\s*/i, "").trim();
+    };
+
+    const addHeader = (companyName) => {
+      if (!companyName) {
+        cursorY = margin;
+        return;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(headingFontSize);
+      doc.text(companyName, margin, cursorY);
+      cursorY += headingFontSize + 6;
+      doc.setDrawColor(210);
+      doc.setLineWidth(0.5);
+      doc.line(margin, cursorY, pageWidth - margin, cursorY);
+      cursorY += sectionSpacing;
+    };
+
+    const addFooter = () => {
+      const totalPages = doc.getNumberOfPages();
+      for (let page = 1; page <= totalPages; page += 1) {
+        doc.setPage(page);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        const footerText = `Page ${page} of ${totalPages}`;
+        const textWidth = doc.getTextWidth(footerText);
+        doc.text(footerText, pageWidth - margin - textWidth, pageHeight - margin + 18);
+      }
     };
 
     const wrapTextToWidth = (text, maxWidth) => {
@@ -1131,7 +1174,7 @@ function App() {
       const remainingText = words.slice(index).join(" ");
       const remainingLines = remainingText ? wrapTextToWidth(remainingText, contentWidth) : [];
       const blockHeight = lineHeight * (1 + remainingLines.length);
-      ensureSpace(blockHeight + 6);
+      ensureSpace(blockHeight + labelGap);
 
       doc.setFont("helvetica", "bold");
       doc.text(label, margin, cursorY);
@@ -1145,21 +1188,18 @@ function App() {
         doc.text(line, margin, cursorY);
         cursorY += lineHeight;
       });
-      cursorY += 6;
+      cursorY += labelGap;
     };
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text("Job Description", margin, cursorY);
-    cursorY += 24;
-
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
+    doc.setFontSize(bodyFontSize);
 
     const lines = generatedJobDesc.split(/\r?\n/);
+    const companyName = extractCompanyName(lines);
+    addHeader(companyName);
     lines.forEach((line) => {
       if (!line.trim()) {
-        cursorY += 12;
+        cursorY += paragraphGap;
         return;
       }
 
@@ -1173,22 +1213,50 @@ function App() {
       }
 
       const isHeading = isJobHeadingLine(line);
-      const wrapped = doc.splitTextToSize(line, contentWidth);
-      const blockHeight = wrapped.length * lineHeight;
-      ensureSpace(blockHeight + 6);
+      const isBullet = /^\s*[-•]\s+/.test(line);
+      const bulletText = isBullet ? line.replace(/^\s*[-•]\s+/, "") : line;
 
       if (isHeading) {
+        const headingLines = wrapTextToWidth(line, contentWidth);
+        const headingHeight = headingLines.length * Math.round(headingFontSize * 1.3);
+        ensureSpace(sectionSpacing + headingHeight + headingGap);
+        cursorY += sectionSpacing;
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(12);
-      } else {
+        doc.setFontSize(headingFontSize);
+        headingLines.forEach((headingLine) => {
+          doc.text(headingLine, margin, cursorY);
+          cursorY += Math.round(headingFontSize * 1.3);
+        });
+        cursorY += headingGap;
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(11);
+        doc.setFontSize(bodyFontSize);
+        return;
       }
 
-      doc.text(wrapped, margin, cursorY);
-      cursorY += blockHeight + 6;
+      const paragraphLines = wrapTextToWidth(
+        bulletText,
+        contentWidth - (isBullet ? bulletIndent : 0)
+      );
+      const blockHeight = paragraphLines.length * lineHeight;
+      const blockGap = isBullet ? bulletSpacing : paragraphGap;
+      ensureSpace(blockHeight + blockGap);
+
+      paragraphLines.forEach((paragraphLine, idx) => {
+        if (isBullet) {
+          if (idx === 0) {
+            doc.text("•", margin, cursorY);
+          }
+          doc.text(paragraphLine, margin + bulletIndent, cursorY);
+        } else {
+          doc.text(paragraphLine, margin, cursorY);
+        }
+        cursorY += lineHeight;
+      });
+
+      cursorY += blockGap;
     });
 
+    addFooter();
     doc.save("job-description.pdf");
   }
 
@@ -2457,7 +2525,7 @@ function App() {
                   className="weights-toggle"
                   onClick={() => setIsWeightsOpen((current) => !current)}
                 >
-                  {isWeightsOpen ? "Closed" : "Edit"}
+                  {isWeightsOpen ? "Close" : "Edit"}
                 </button>
               </div>
             </div>
@@ -2838,10 +2906,9 @@ function App() {
               </div>
             </div>
 
-            <div className="jobgen-body">
+            <div className="jobgen-body ">
               {!generatedJobDesc.trim() && (
                 <section className="jobgen-section">
-                  <h4>Quick JD Creator</h4>
                   <label className="field">
                     <span>Company Name</span>
                     <input
@@ -2989,11 +3056,17 @@ function App() {
                       onChange={(event) => updateQuickJobField("eligibility", event.target.value)}
                     />
                   </label>
-                  <div className="action-row">
+                  <div className="action-row jobgen-preview-actions">
                     <button
                       type="button"
                       className="secondary-button"
-                      onClick={handleQuickJobDescription}
+                      onClick={() => {
+                        handleQuickJobDescription();
+                        previewSectionRef.current?.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start"
+                        });
+                      }}
                     >
                       Create JD
                     </button>
@@ -3001,39 +3074,32 @@ function App() {
                 </section>
               )}
 
-              {!generatedJobDesc.trim() && (
-                <>
-                </>
-              )}
-
-              <section className="jobgen-section">
-                <h4>Preview</h4>
-                {isPreviewEditable ? (
-                  <textarea
-                    className="jobgen-preview"
-                    rows="10"
-                    value={generatedJobDesc}
-                    onChange={(event) => setGeneratedJobDesc(event.target.value)}
-                    placeholder="Generated job description will appear here."
-                  />
-                ) : (
-                  <div className="jobgen-preview">
-                    {generatedJobDesc
-                      ? generatedJobDesc.split(/\r?\n/).map((line, index) => {
-                          if (!line.trim()) {
-                            return <div key={`space-${index}`} style={{ height: 10 }} />;
-                          }
-                          return (
-                            <p key={`line-${index}`}>
-                              {renderPreviewLine(line)}
-                            </p>
-                          );
-                        })
-                      : "Generated job description will appear here."}
-                  </div>
-                )}
-                <div className="action-row">
-                  {generatedJobDesc.trim() && (
+              {generatedJobDesc.trim() && (
+                <section className="jobgen-section" ref={previewSectionRef}>
+                  <h4>Preview</h4>
+                  {isPreviewEditable ? (
+                    <textarea
+                      className="jobgen-preview"
+                      rows="10"
+                      value={generatedJobDesc}
+                      onChange={(event) => setGeneratedJobDesc(event.target.value)}
+                      placeholder="Generated job description will appear here."
+                    />
+                  ) : (
+                    <div className="jobgen-preview">
+                      {generatedJobDesc.split(/\r?\n/).map((line, index) => {
+                        if (!line.trim()) {
+                          return <div key={`space-${index}`} style={{ height: 10 }} />;
+                        }
+                        return (
+                          <p key={`line-${index}`}>
+                            {renderPreviewLine(line)}
+                          </p>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="action-row ">
                     <button
                       type="button"
                       className="secondary-button"
@@ -3041,37 +3107,30 @@ function App() {
                     >
                       Edit Inputs
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={resetJobGenerator}
-                  >
-                    Reset
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={handleCopyJobDescription}
-                  >
-                    Copy
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={handleUseJobDescription}
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={downloadJobDescriptionPdf}
-                  >
-                    Download JD PDF
-                  </button>
-                </div>
-              </section>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={resetJobGenerator}
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={handleCopyJobDescription}
+                    >
+                      Copy
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={downloadJobDescriptionPdf}
+                    >
+                      Download JD PDF
+                    </button>
+                  </div>
+                </section>
+              )}
             </div>
 
             <div className="action-row jobgen-footer">
@@ -3082,13 +3141,15 @@ function App() {
               >
                 Cancel
               </button>
-              <button
-                type="button"
-                className="primary-button"
-                onClick={handleGenerateJobDescription}
-              >
-                Generate Job Description
-              </button>
+              {generatedJobDesc.trim() && (
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={handleUseJobDescription}
+                >
+                  Confirm
+                </button>
+              )}
             </div>
           </div>
         </div>
