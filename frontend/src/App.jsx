@@ -2157,6 +2157,7 @@ function App() {
           <span className="auth-orb orb-3" />
           <span className="auth-orb orb-4" />
         </div>
+        <div className="stars" aria-hidden="true" />
         <section className="hero-panel auth-content">
           <motion.div variants={loginTextVariants} initial="hidden" animate="show">
             <motion.p className="eyebrow" variants={loginTextItemVariants}>
