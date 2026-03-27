@@ -10,6 +10,19 @@ function isOtpDisabled() {
   return String(process.env.DISABLE_OTP || "").toLowerCase() === "true";
 }
 
+function signTokenForUser(user) {
+  if (!process.env.JWT_SECRET) {
+    console.error("JWT_SECRET is not set");
+    return null;
+  }
+
+  return jwt.sign(
+    { id: user._id.toString(), email: user.email },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+}
+
 function validateEmail(email) {
   return typeof email === "string" && /\S+@\S+\.\S+/.test(email);
 }
@@ -44,31 +57,55 @@ router.post("/register", async (req, res) => {
         return res.status(409).json({ error: "Email already registered" });
       }
 
-      if (!otpDisabled) {
-        const otp = generateOtp();
-        existing.otp = otp;
-        existing.otpExpiry = getOtpExpiry();
-        await existing.save();
-        await sendOtpEmail({ to: normalizedEmail, otp });
-      } else {
+      if (otpDisabled) {
+        existing.isVerified = true;
         existing.otp = null;
         existing.otpExpiry = null;
         await existing.save();
+
+        const token = signTokenForUser(existing);
+        if (!token) {
+          return res.status(500).json({ error: "Server configuration error" });
+        }
+
+        return res.status(200).json({
+          message: "Registration completed (OTP disabled).",
+          verificationRequired: false,
+          token,
+          user: { id: existing._id.toString(), email: existing.email }
+        });
       }
+
+      const otp = generateOtp();
+      existing.otp = otp;
+      existing.otpExpiry = getOtpExpiry();
+      await existing.save();
+      await sendOtpEmail({ to: normalizedEmail, otp });
+
       return res.status(200).json({
-        message: otpDisabled ? "OTP disabled. Continue to verification." : "OTP re-sent to your email",
+        message: "OTP re-sent to your email",
         verificationRequired: true
       });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await User.create({
-      email: normalizedEmail,
-      passwordHash,
-      isVerified: false,
-      otp: otpDisabled ? null : generateOtp(),
-      otpExpiry: otpDisabled ? null : getOtpExpiry()
-    });
+    const user = await User.create(
+      otpDisabled
+        ? {
+            email: normalizedEmail,
+            passwordHash,
+            isVerified: true,
+            otp: null,
+            otpExpiry: null
+          }
+        : {
+            email: normalizedEmail,
+            passwordHash,
+            isVerified: false,
+            otp: generateOtp(),
+            otpExpiry: getOtpExpiry()
+          }
+    );
 
     try {
       if (!otpDisabled) {
@@ -77,11 +114,36 @@ router.post("/register", async (req, res) => {
     } catch (emailErr) {
       console.error("OTP email error:", emailErr);
       await User.deleteOne({ _id: user._id });
-      return res.status(500).json({ error: "Failed to send OTP email" });
+      const hint =
+        emailErr && typeof emailErr.message === "string"
+          ? emailErr.message
+          : "";
+      const isConfigIssue =
+        hint.includes("SMTP configuration is missing") || hint.includes("SMTP_FROM is not set");
+
+      return res.status(500).json({
+        error: isConfigIssue
+          ? "OTP email is not configured on the server. Configure SMTP_* env vars or set DISABLE_OTP=true."
+          : "Failed to send OTP email"
+      });
     }
 
-    res.status(201).json({
-      message: otpDisabled ? "OTP disabled. Continue to verification." : "OTP sent to your email",
+    if (otpDisabled) {
+      const token = signTokenForUser(user);
+      if (!token) {
+        return res.status(500).json({ error: "Server configuration error" });
+      }
+
+      return res.status(201).json({
+        message: "Registration completed (OTP disabled).",
+        verificationRequired: false,
+        token,
+        user: { id: user._id.toString(), email: user.email }
+      });
+    }
+
+    return res.status(201).json({
+      message: "OTP sent to your email",
       verificationRequired: true
     });
   } catch (err) {
@@ -96,8 +158,8 @@ router.post("/verify-otp", async (req, res) => {
     const otp = typeof req.body.otp === "string" ? req.body.otp.trim() : "";
     const otpDisabled = isOtpDisabled();
 
-    if (!validateEmail(email) || !otp) {
-      return res.status(400).json({ error: "Email and OTP are required" });
+    if (!validateEmail(email) || (!otpDisabled && !otp)) {
+      return res.status(400).json({ error: otpDisabled ? "Email is required" : "Email and OTP are required" });
     }
 
     const user = await User.findOne({ email: email.toLowerCase() });
@@ -128,16 +190,10 @@ router.post("/verify-otp", async (req, res) => {
     user.otpExpiry = null;
     await user.save();
 
-    if (!process.env.JWT_SECRET) {
-      console.error("JWT_SECRET is not set");
+    const token = signTokenForUser(user);
+    if (!token) {
       return res.status(500).json({ error: "Server configuration error" });
     }
-
-    const token = jwt.sign(
-      { id: user._id.toString(), email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
 
     res.json({
       message: "Email verified successfully",
@@ -290,16 +346,10 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    if (!process.env.JWT_SECRET) {
-      console.error("JWT_SECRET is not set");
+    const token = signTokenForUser(user);
+    if (!token) {
       return res.status(500).json({ error: "Server configuration error" });
     }
-
-    const token = jwt.sign(
-      { id: user._id.toString(), email: user.email },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
 
     res.json({
       token,

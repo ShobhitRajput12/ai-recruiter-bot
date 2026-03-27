@@ -1508,12 +1508,24 @@ function App() {
       }
 
       if (authMode === "signup") {
+        if (data.token) {
+          persistAuthToken(data.token);
+          if (data.user) {
+            persistUser(data.user);
+          } else {
+            persistUser({ email: authEmail.trim().toLowerCase() });
+          }
+          setAuthPassword("");
+          setAuthConfirm("");
+          return;
+        }
+
         if (data.verificationRequired) {
           setSignupStep("otp");
           setSignupMessage(data.message || "OTP sent to your email");
           return;
         }
-        throw new Error("No OTP response from server");
+        throw new Error(data.message || "Signup failed");
       }
 
       if (!data.token) {

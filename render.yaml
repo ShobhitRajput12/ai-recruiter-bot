@@ -28,6 +28,10 @@ services:
         value: "" # Set this in Render dashboard (secret)
       - key: SMTP_FROM
         value: "" # e.g. Hirebud AI <no-reply@yourdomain.com>
+      - key: JWT_SECRET
+        value: "" # Set this in Render dashboard (secret)
+      - key: DISABLE_OTP
+        value: "true"
 
   - type: static_site
     name: ai-recruiter-bot-frontend
