@@ -1,4 +1,4 @@
-const axios = require("axios");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const DEFAULT_CATEGORY_WEIGHTS = {
   technicalSkills: 30,
@@ -325,6 +325,11 @@ async function scoreResume(resume, job, categoryWeights) {
   const normalizedWeights = normalizeCategoryWeights(categoryWeights);
 
   try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY is not set");
+    }
+
     const prompt = `
 Compare this resume against the job description.
 
@@ -355,23 +360,11 @@ Rules:
 - do not add explanation text
 `;
 
-    const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    const response = await axios.post(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        model,
-        messages: [{ role: "user", content: prompt }]
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-
-    const text = response.data.choices[0].message.content;
+    const response = await model.generateContent(prompt);
+    const text = response?.response?.text?.() || "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
 
@@ -420,7 +413,7 @@ Rules:
       finalScore: weightedScores.finalScore
     });
   } catch (error) {
-    console.log("Groq Error:", error.response?.data || error.message);
+    console.log("Gemini Error:", error.message);
     return withLegacyAndJsonAliases({
       technicalSkillsScore: 0,
       softwareSoftSkillsScore: 0,

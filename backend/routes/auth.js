@@ -6,6 +6,10 @@ const { sendOtpEmail } = require("../utils/mailer");
 
 const router = express.Router();
 
+function isOtpDisabled() {
+  return String(process.env.DISABLE_OTP || "").toLowerCase() === "true";
+}
+
 function validateEmail(email) {
   return typeof email === "string" && /\S+@\S+\.\S+/.test(email);
 }
@@ -23,6 +27,7 @@ router.post("/register", async (req, res) => {
   try {
     const email = typeof req.body.email === "string" ? req.body.email.trim() : "";
     const password = typeof req.body.password === "string" ? req.body.password : "";
+    const otpDisabled = isOtpDisabled();
 
     if (!validateEmail(email)) {
       return res.status(400).json({ error: "Valid email is required" });
@@ -39,30 +44,36 @@ router.post("/register", async (req, res) => {
         return res.status(409).json({ error: "Email already registered" });
       }
 
-      const otp = generateOtp();
-      existing.otp = otp;
-      existing.otpExpiry = getOtpExpiry();
-      await existing.save();
-
-      await sendOtpEmail({ to: normalizedEmail, otp });
+      if (!otpDisabled) {
+        const otp = generateOtp();
+        existing.otp = otp;
+        existing.otpExpiry = getOtpExpiry();
+        await existing.save();
+        await sendOtpEmail({ to: normalizedEmail, otp });
+      } else {
+        existing.otp = null;
+        existing.otpExpiry = null;
+        await existing.save();
+      }
       return res.status(200).json({
-        message: "OTP re-sent to your email",
+        message: otpDisabled ? "OTP disabled. Continue to verification." : "OTP re-sent to your email",
         verificationRequired: true
       });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
-    const otp = generateOtp();
     const user = await User.create({
       email: normalizedEmail,
       passwordHash,
       isVerified: false,
-      otp,
-      otpExpiry: getOtpExpiry()
+      otp: otpDisabled ? null : generateOtp(),
+      otpExpiry: otpDisabled ? null : getOtpExpiry()
     });
 
     try {
-      await sendOtpEmail({ to: normalizedEmail, otp });
+      if (!otpDisabled) {
+        await sendOtpEmail({ to: normalizedEmail, otp: user.otp });
+      }
     } catch (emailErr) {
       console.error("OTP email error:", emailErr);
       await User.deleteOne({ _id: user._id });
@@ -70,7 +81,7 @@ router.post("/register", async (req, res) => {
     }
 
     res.status(201).json({
-      message: "OTP sent to your email",
+      message: otpDisabled ? "OTP disabled. Continue to verification." : "OTP sent to your email",
       verificationRequired: true
     });
   } catch (err) {
@@ -83,6 +94,7 @@ router.post("/verify-otp", async (req, res) => {
   try {
     const email = typeof req.body.email === "string" ? req.body.email.trim() : "";
     const otp = typeof req.body.otp === "string" ? req.body.otp.trim() : "";
+    const otpDisabled = isOtpDisabled();
 
     if (!validateEmail(email) || !otp) {
       return res.status(400).json({ error: "Email and OTP are required" });
@@ -97,16 +109,18 @@ router.post("/verify-otp", async (req, res) => {
       return res.status(200).json({ message: "Email already verified" });
     }
 
-    if (!user.otp || !user.otpExpiry) {
-      return res.status(400).json({ error: "OTP not found. Please request a new one." });
-    }
+    if (!otpDisabled) {
+      if (!user.otp || !user.otpExpiry) {
+        return res.status(400).json({ error: "OTP not found. Please request a new one." });
+      }
 
-    if (user.otp !== otp) {
-      return res.status(400).json({ error: "Invalid OTP" });
-    }
+      if (user.otp !== otp) {
+        return res.status(400).json({ error: "Invalid OTP" });
+      }
 
-    if (user.otpExpiry.getTime() < Date.now()) {
-      return res.status(400).json({ error: "OTP expired. Please request a new one." });
+      if (user.otpExpiry.getTime() < Date.now()) {
+        return res.status(400).json({ error: "OTP expired. Please request a new one." });
+      }
     }
 
     user.isVerified = true;
@@ -139,6 +153,7 @@ router.post("/verify-otp", async (req, res) => {
 router.post("/resend-otp", async (req, res) => {
   try {
     const email = typeof req.body.email === "string" ? req.body.email.trim() : "";
+    const otpDisabled = isOtpDisabled();
 
     if (!validateEmail(email)) {
       return res.status(400).json({ error: "Valid email is required" });
@@ -152,6 +167,10 @@ router.post("/resend-otp", async (req, res) => {
 
     if (user.isVerified) {
       return res.status(200).json({ message: "Email already verified" });
+    }
+
+    if (otpDisabled) {
+      return res.status(200).json({ message: "OTP disabled." });
     }
 
     const otp = generateOtp();
@@ -244,6 +263,7 @@ router.post("/login", async (req, res) => {
   try {
     const email = typeof req.body.email === "string" ? req.body.email.trim() : "";
     const password = typeof req.body.password === "string" ? req.body.password : "";
+    const otpDisabled = isOtpDisabled();
 
     if (!validateEmail(email) || !password) {
       return res.status(400).json({ error: "Email and password are required" });
@@ -255,7 +275,14 @@ router.post("/login", async (req, res) => {
     }
 
     if (!user.isVerified) {
-      return res.status(403).json({ error: "Email not verified" });
+      if (otpDisabled) {
+        user.isVerified = true;
+        user.otp = null;
+        user.otpExpiry = null;
+        await user.save();
+      } else {
+        return res.status(403).json({ error: "Email not verified" });
+      }
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
