@@ -605,6 +605,7 @@ function App() {
   const [authPassword, setAuthPassword] = useState("");
   const [authConfirm, setAuthConfirm] = useState("");
   const [authError, setAuthError] = useState("");
+  const [loginToastOpen, setLoginToastOpen] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [signupStep, setSignupStep] = useState("form");
   const [signupOtp, setSignupOtp] = useState("");
@@ -627,6 +628,7 @@ function App() {
     }
   });
   const userMenuRef = useRef(null);
+  const loginToastTimeoutRef = useRef(null);
   const [files, setFiles] = useState([]);
   const [job, setJob] = useState("");
   const [groupName, setGroupName] = useState("");
@@ -656,6 +658,25 @@ function App() {
   const [isPreviewEditable, setIsPreviewEditable] = useState(false);
   const [quickJobData, setQuickJobData] = useState(INITIAL_QUICK_JOB_DATA);
   const [jobGenData, setJobGenData] = useState(INITIAL_JOB_GEN_DATA);
+
+  useEffect(() => {
+    return () => {
+      if (loginToastTimeoutRef.current) {
+        clearTimeout(loginToastTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  function showLoginFailureToast() {
+    if (loginToastTimeoutRef.current) {
+      clearTimeout(loginToastTimeoutRef.current);
+    }
+
+    setLoginToastOpen(true);
+    loginToastTimeoutRef.current = setTimeout(() => {
+      setLoginToastOpen(false);
+    }, 4000);
+  }
 
   function persistAuthToken(nextToken) {
     setAuthToken(nextToken);
@@ -1541,7 +1562,12 @@ function App() {
       setAuthPassword("");
       setAuthConfirm("");
     } catch (err) {
-      setAuthError(err.message || "Authentication failed");
+      if (authMode === "login") {
+        setAuthError("");
+        showLoginFailureToast();
+      } else {
+        setAuthError(err.message || "Authentication failed");
+      }
     } finally {
       setAuthLoading(false);
     }
@@ -2162,6 +2188,34 @@ function App() {
   if (!authToken) {
     return (
       <div className="app-shell auth-shell futuristic-shell relative overflow-hidden">
+        {loginToastOpen && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              position: "fixed",
+              top: 18,
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 9999,
+              maxWidth: 360,
+              pointerEvents: "none"
+            }}
+          >
+            <div
+              style={{
+                background: "rgba(15, 23, 42, 0.92)",
+                border: "1px solid rgba(148, 163, 184, 0.18)",
+                color: "#f8fafc",
+                padding: "12px 14px",
+                borderRadius: 14,
+                boxShadow: "0 18px 50px rgba(0,0,0,0.35)"
+              }}
+            >
+              Login failed. Please check your email and password.
+            </div>
+          </div>
+        )}
         <div className="auth-background" aria-hidden="true">
           <div className="auth-gradient" />
           <span className="auth-orb orb-1" />
@@ -2301,7 +2355,7 @@ function App() {
               {authMode === "signup" && signupMessage && (
                 <p className="helper-text success-text">{signupMessage}</p>
               )}
-              {authError && (
+              {authMode !== "login" && authError && (
                 <p className="helper-text weight-warning">{authError}</p>
               )}
               <div className="action-row">
