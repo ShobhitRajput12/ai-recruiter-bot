@@ -28,7 +28,7 @@ async function sendOtpEmail({ to, otp }) {
 
   const from =
     process.env.SMTP_FROM ||
-    (process.env.SMTP_USER ? `Hirebud AI <${process.env.SMTP_USER}>` : undefined);
+    (process.env.SMTP_USER ? `Hirebuddy AI <${process.env.SMTP_USER}>` : undefined);
 
   if (!from) {
     throw new Error("SMTP_FROM is not set");
@@ -49,7 +49,7 @@ async function sendOtpEmail({ to, otp }) {
 
   const html = `
     <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-      <h2 style="color: #222;">Verify your Hirebud AI account</h2>
+      <h2 style="color: #222;">Verify your Hirebuddy AI account</h2>
       <p>Use the OTP below to verify your email address:</p>
       <div style="font-size: 28px; font-weight: 700; letter-spacing: 4px; margin: 16px 0;">
         ${otp}
@@ -62,7 +62,7 @@ async function sendOtpEmail({ to, otp }) {
     await transporter.sendMail({
       from,
       to,
-      subject: "Your Hirebud AI verification code",
+      subject: "Your Hirebuddy AI verification code",
       html
     });
   } catch (err) {

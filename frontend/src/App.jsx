@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { jsPDF } from "jspdf";
 import { API_BASE_URL } from "./config";
@@ -28,7 +28,7 @@ const DEFAULT_SCORE_WEIGHTS = {
   educationCertification: 1.5
 };
 
-const AUTH_TOKEN_KEY = "hirebud_ai_token";
+const AUTH_TOKEN_KEY = "hirebuddy_ai_token";
 const USER_STORAGE_KEY = "user";
 const LEGACY_TOKEN_KEY = "token";
 
@@ -2227,12 +2227,12 @@ function App() {
         <section className="hero-panel auth-content">
           <motion.div variants={loginTextVariants} initial="hidden" animate="show">
             <motion.p className="eyebrow" variants={loginTextItemVariants}>
-              Hirebud AI
+              Hirebuddy AI
             </motion.p>
             <motion.h1 variants={loginTextItemVariants}>
               {authMode === "login"
                 ? "Sign in to your hiring workspace."
-                : "Create your Hirebud AI account."}
+                : "Create your Hirebuddy AI account."}
             </motion.h1>
             <motion.p className="hero-copy" variants={loginTextItemVariants}>
               Access your pipelines, resumes, and candidate insights securely.
@@ -2517,7 +2517,7 @@ function App() {
   return (
     <div className="app-shell futuristic-shell">
       <header className="top-nav m-1">
-        <div className="app-title left">Hirebud AI</div>
+        <div className="app-title left">Hirebuddy AI</div>
         <div className="app-title spacer" aria-hidden="true" />
         <div className="user-menu" ref={userMenuRef}>
           <button
@@ -2541,7 +2541,7 @@ function App() {
       </header>
       <section className="hero-panel">
         <div>
-          <p className="eyebrow">Hirebud AI workspace</p>
+          <p className="eyebrow">Hirebuddy AI workspace</p>
           <h1>Group resumes, preview uploads, and review stronger candidate signals.</h1>
           <p className="hero-copy">
             Build role-based pipelines such as Digital Marketer or Content Creator,
@@ -2852,7 +2852,7 @@ function App() {
           </div>
 
           <div className="chat-panel">
-            <p className="panel-kicker">Hirebud AI chat</p>
+            <p className="panel-kicker">Hirebuddy AI chat</p>
             <h3>Ask about {(selectedGroupFilter || "all groups").toLowerCase()}</h3>
             <input
               type="text"

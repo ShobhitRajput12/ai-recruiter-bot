@@ -27,7 +27,7 @@ services:
       - key: SMTP_PASS
         value: "" # Set this in Render dashboard (secret)
       - key: SMTP_FROM
-        value: "" # e.g. Hirebud AI <no-reply@yourdomain.com>
+        value: "" # e.g. Hirebuddy AI <no-reply@yourdomain.com>
       - key: JWT_SECRET
         value: "" # Set this in Render dashboard (secret)
       - key: DISABLE_OTP
